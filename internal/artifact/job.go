@@ -39,12 +39,12 @@ import (
 const pipelineScript = `set -euo pipefail
 cd /workspace
 
-import_tag="$HF_REPO:latest"
 import_args="$HF_REPO"
 if [ -n "${HF_REVISION:-}" ]; then import_args="$import_args --ref $HF_REVISION"; fi
 if [ -n "${HF_TOKEN:-}" ]; then import_args="$import_args --token $HF_TOKEN"; fi
 kit import $import_args
 
+import_tag="$HF_REPO:latest"
 if [ "$FORMAT" = "ModelPack" ]; then
   # Unpack the ModelKit to workspace, then repack as ModelPack (kit import always creates ModelKit).
   unpack_flags="-o"
