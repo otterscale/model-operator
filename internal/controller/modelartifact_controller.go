@@ -203,7 +203,7 @@ func (r *ModelArtifactReconciler) updateStatus(ctx context.Context, ma *modelv1a
 
 	if obs.Digest != "" {
 		newStatus.Digest = obs.Digest
-		newStatus.RepositoryURL = artifact.OCIReference(ma)
+		newStatus.Reference = artifact.OCIReference(ma)
 	}
 
 	if job != nil {

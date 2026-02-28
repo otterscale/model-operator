@@ -37,8 +37,8 @@ func newTestArtifact() *modelv1alpha1.ModelArtifact {
 		Spec: modelv1alpha1.ModelArtifactSpec{
 			Source: modelv1alpha1.ModelSource{
 				HuggingFace: &modelv1alpha1.HuggingFaceSource{
-					Repo:     "microsoft/phi-4",
-					Revision: "main",
+					Repository: "microsoft/phi-4",
+					Revision:   "main",
 					TokenSecretRef: &modelv1alpha1.SecretKeySelector{
 						Name: "hf-token",
 						Key:  "token",
@@ -235,7 +235,7 @@ var _ = Describe("BuildJob", func() {
 				Spec: modelv1alpha1.ModelArtifactSpec{
 					Source: modelv1alpha1.ModelSource{
 						HuggingFace: &modelv1alpha1.HuggingFaceSource{
-							Repo: "org/model",
+							Repository: "org/model",
 						},
 					},
 					Target: modelv1alpha1.OCITarget{
@@ -290,9 +290,9 @@ var _ = Describe("BuildJob", func() {
 		})
 	})
 
-	Context("PlainHTTP", func() {
+	Context("Insecure", func() {
 		It("should set PLAIN_HTTP=true when enabled", func() {
-			ma.Spec.Target.PlainHTTP = true
+			ma.Spec.Target.Insecure = true
 			job := artifact.BuildJob(ma, kitImage, nil)
 			container := job.Spec.Template.Spec.Containers[0]
 			Expect(container.Env).To(ContainElement(

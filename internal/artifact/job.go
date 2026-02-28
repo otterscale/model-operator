@@ -163,12 +163,12 @@ func buildEnvVars(artifact *modelv1alpha1.ModelArtifact) []corev1.EnvVar {
 		{Name: "FORMAT", Value: string(artifact.Spec.Format)},
 	}
 
-	if artifact.Spec.Target.PlainHTTP {
+	if artifact.Spec.Target.Insecure {
 		envs = append(envs, corev1.EnvVar{Name: "PLAIN_HTTP", Value: "true"})
 	}
 
 	if hf := artifact.Spec.Source.HuggingFace; hf != nil {
-		envs = append(envs, corev1.EnvVar{Name: "HF_REPO", Value: hf.Repo})
+		envs = append(envs, corev1.EnvVar{Name: "HF_REPO", Value: hf.Repository})
 
 		if hf.Revision != "" {
 			envs = append(envs, corev1.EnvVar{Name: "HF_REVISION", Value: hf.Revision})
