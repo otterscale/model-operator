@@ -29,7 +29,7 @@ import (
 
 // pipelineScript executes the kit import → pack → push pipeline.
 // SECURITY: Env vars (HF_REPO, HF_REVISION, OCI_TARGET, etc.) come from the ModelArtifact CR.
-// The CRD schema validates Repo, Revision, Repository, and Tag with Pattern restrictions
+// The CRD schema validates Model, Revision, Registry, Repository, and Tag with Pattern restrictions
 // to prevent shell injection. Only users who can create ModelArtifacts have access.
 const pipelineScript = `set -euo pipefail
 cd /workspace
@@ -154,7 +154,7 @@ func OCIReference(artifact *modelv1alpha1.ModelArtifact) string {
 	if tag == "" {
 		tag = "latest"
 	}
-	return fmt.Sprintf("%s:%s", artifact.Spec.Target.Repository, tag)
+	return fmt.Sprintf("%s/%s:%s", artifact.Spec.Target.Registry, artifact.Spec.Target.Repository, tag)
 }
 
 func buildEnvVars(artifact *modelv1alpha1.ModelArtifact) []corev1.EnvVar {
@@ -168,7 +168,7 @@ func buildEnvVars(artifact *modelv1alpha1.ModelArtifact) []corev1.EnvVar {
 	}
 
 	if hf := artifact.Spec.Source.HuggingFace; hf != nil {
-		envs = append(envs, corev1.EnvVar{Name: "HF_REPO", Value: hf.Repository})
+		envs = append(envs, corev1.EnvVar{Name: "HF_REPO", Value: hf.Model})
 
 		if hf.Revision != "" {
 			envs = append(envs, corev1.EnvVar{Name: "HF_REVISION", Value: hf.Revision})
