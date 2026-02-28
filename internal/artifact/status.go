@@ -38,10 +38,27 @@ type ObservationResult struct {
 // ObserveJobStatus derives the ModelArtifact phase, condition, and digest
 // from the current state of a Job and its owned Pods.
 //
+// When job is nil, if fallbackPhase is Succeeded or Failed, returns a preserved
+// terminal state (e.g. after Job TTL cleanup); otherwise returns JobNotCreated.
+// fallbackPhase and fallbackDigest are ignored when job is non-nil.
+//
 // This is a pure function with no side effects — all observation logic is
 // testable without a running cluster.
-func ObserveJobStatus(job *batchv1.Job, pods []corev1.Pod) ObservationResult {
+func ObserveJobStatus(job *batchv1.Job, pods []corev1.Pod, fallbackPhase modelv1alpha1.ArtifactPhase, fallbackDigest string) ObservationResult {
 	if job == nil {
+		if fallbackPhase == modelv1alpha1.PhaseSucceeded || fallbackPhase == modelv1alpha1.PhaseFailed {
+			ready := metav1.ConditionFalse
+			if fallbackPhase == modelv1alpha1.PhaseSucceeded {
+				ready = metav1.ConditionTrue
+			}
+			return ObservationResult{
+				Phase:   fallbackPhase,
+				Ready:   ready,
+				Reason:  "Completed",
+				Message: "Pipeline completed; Job was cleaned up",
+				Digest:  fallbackDigest,
+			}
+		}
 		return ObservationResult{
 			Phase:   modelv1alpha1.PhasePending,
 			Ready:   metav1.ConditionFalse,

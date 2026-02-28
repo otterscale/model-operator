@@ -20,6 +20,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -95,6 +96,11 @@ func (r *ModelArtifactReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if deleteErr := artifact.DeletePVC(ctx, r.Client, &ma); deleteErr != nil {
 			logger.Error(deleteErr, "Failed to delete workspace PVC after completion")
 		}
+	}
+
+	// 5. Requeue to poll for digest when Job succeeded but digest not yet available from pod termination message
+	if obs.Phase == modelv1alpha1.PhaseSucceeded && obs.Digest == "" {
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -199,25 +205,7 @@ func (r *ModelArtifactReconciler) updateStatus(ctx context.Context, ma *modelv1a
 		return artifact.ObservationResult{}, err
 	}
 
-	var obs artifact.ObservationResult
-	if job != nil {
-		obs = artifact.ObserveJobStatus(job, pods)
-	} else if ma.Status.Phase == modelv1alpha1.PhaseSucceeded || ma.Status.Phase == modelv1alpha1.PhaseFailed {
-		// Job was cleaned up by TTL; preserve terminal state so DeletePVC can proceed
-		ready := metav1.ConditionFalse
-		if ma.Status.Phase == modelv1alpha1.PhaseSucceeded {
-			ready = metav1.ConditionTrue
-		}
-		obs = artifact.ObservationResult{
-			Phase:   ma.Status.Phase,
-			Ready:   ready,
-			Reason:  "Completed",
-			Message: "Pipeline completed; Job was cleaned up",
-			Digest:  ma.Status.Digest,
-		}
-	} else {
-		obs = artifact.ObserveJobStatus(nil, pods)
-	}
+	obs := artifact.ObserveJobStatus(job, pods, ma.Status.Phase, ma.Status.Digest)
 
 	newStatus := ma.Status.DeepCopy()
 	newStatus.ObservedGeneration = ma.Generation

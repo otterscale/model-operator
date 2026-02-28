@@ -32,11 +32,25 @@ import (
 
 var _ = Describe("ObserveJobStatus", func() {
 	Context("when Job is nil", func() {
-		It("should return PhasePending with ConditionFalse", func() {
-			result := artifact.ObserveJobStatus(nil, nil)
+		It("should return PhasePending with ConditionFalse when no fallback", func() {
+			result := artifact.ObserveJobStatus(nil, nil, "", "")
 			Expect(result.Phase).To(Equal(modelv1alpha1.PhasePending))
 			Expect(result.Ready).To(Equal(metav1.ConditionFalse))
 			Expect(result.Reason).To(Equal("JobNotCreated"))
+		})
+
+		It("should preserve Succeeded when fallback phase is Succeeded", func() {
+			result := artifact.ObserveJobStatus(nil, nil, modelv1alpha1.PhaseSucceeded, "sha256:abc")
+			Expect(result.Phase).To(Equal(modelv1alpha1.PhaseSucceeded))
+			Expect(result.Ready).To(Equal(metav1.ConditionTrue))
+			Expect(result.Digest).To(Equal("sha256:abc"))
+			Expect(result.Reason).To(Equal("Completed"))
+		})
+
+		It("should preserve Failed when fallback phase is Failed", func() {
+			result := artifact.ObserveJobStatus(nil, nil, modelv1alpha1.PhaseFailed, "")
+			Expect(result.Phase).To(Equal(modelv1alpha1.PhaseFailed))
+			Expect(result.Ready).To(Equal(metav1.ConditionFalse))
 		})
 	})
 
@@ -45,7 +59,7 @@ var _ = Describe("ObserveJobStatus", func() {
 			job := &batchv1.Job{
 				Status: batchv1.JobStatus{Active: 1},
 			}
-			result := artifact.ObserveJobStatus(job, nil)
+			result := artifact.ObserveJobStatus(job, nil, "", "")
 			Expect(result.Phase).To(Equal(modelv1alpha1.PhaseRunning))
 			Expect(result.Ready).To(Equal(metav1.ConditionUnknown))
 			Expect(result.Reason).To(Equal("JobRunning"))
@@ -73,7 +87,7 @@ var _ = Describe("ObserveJobStatus", func() {
 				},
 			}
 
-			result := artifact.ObserveJobStatus(job, pods)
+			result := artifact.ObserveJobStatus(job, pods, "", "")
 			Expect(result.Phase).To(Equal(modelv1alpha1.PhaseSucceeded))
 			Expect(result.Ready).To(Equal(metav1.ConditionTrue))
 			Expect(result.Digest).To(Equal("sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"))
@@ -83,7 +97,7 @@ var _ = Describe("ObserveJobStatus", func() {
 			job := &batchv1.Job{
 				Status: batchv1.JobStatus{Succeeded: 1},
 			}
-			result := artifact.ObserveJobStatus(job, nil)
+			result := artifact.ObserveJobStatus(job, nil, "", "")
 			Expect(result.Phase).To(Equal(modelv1alpha1.PhaseSucceeded))
 			Expect(result.Digest).To(BeEmpty())
 		})
@@ -119,7 +133,7 @@ var _ = Describe("ObserveJobStatus", func() {
 				},
 			}
 
-			result := artifact.ObserveJobStatus(job, pods)
+			result := artifact.ObserveJobStatus(job, pods, "", "")
 			Expect(result.Phase).To(Equal(modelv1alpha1.PhaseFailed))
 			Expect(result.Ready).To(Equal(metav1.ConditionFalse))
 			Expect(result.Message).To(Equal("kit import: repository not found"))
@@ -139,7 +153,7 @@ var _ = Describe("ObserveJobStatus", func() {
 				},
 			}
 
-			result := artifact.ObserveJobStatus(job, nil)
+			result := artifact.ObserveJobStatus(job, nil, "", "")
 			Expect(result.Phase).To(Equal(modelv1alpha1.PhaseFailed))
 			Expect(result.Message).To(Equal("BackoffLimitExceeded"))
 		})
@@ -158,7 +172,7 @@ var _ = Describe("ObserveJobStatus", func() {
 				},
 			}
 
-			result := artifact.ObserveJobStatus(job, nil)
+			result := artifact.ObserveJobStatus(job, nil, "", "")
 			Expect(result.Phase).To(Equal(modelv1alpha1.PhaseFailed))
 		})
 	})
@@ -168,7 +182,7 @@ var _ = Describe("ObserveJobStatus", func() {
 			job := &batchv1.Job{
 				Status: batchv1.JobStatus{},
 			}
-			result := artifact.ObserveJobStatus(job, nil)
+			result := artifact.ObserveJobStatus(job, nil, "", "")
 			Expect(result.Phase).To(Equal(modelv1alpha1.PhasePending))
 			Expect(result.Ready).To(Equal(metav1.ConditionUnknown))
 		})
@@ -202,7 +216,7 @@ var _ = Describe("ObserveJobStatus", func() {
 			job := &batchv1.Job{
 				Status: batchv1.JobStatus{Succeeded: 1},
 			}
-			result := artifact.ObserveJobStatus(job, pods)
+			result := artifact.ObserveJobStatus(job, pods, "", "")
 			Expect(result.Digest).To(Equal("sha256:deadbeef"))
 		})
 	})
@@ -237,7 +251,7 @@ var _ = Describe("ObserveJobStatus", func() {
 				},
 			}
 
-			result := artifact.ObserveJobStatus(job, pods)
+			result := artifact.ObserveJobStatus(job, pods, "", "")
 			Expect(result.Message).To(HaveLen(1024))
 			Expect(result.Message).To(HaveSuffix("..."))
 		})
