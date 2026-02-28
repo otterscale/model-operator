@@ -17,7 +17,6 @@ limitations under the License.
 package artifact
 
 import (
-	"slices"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -92,51 +91,26 @@ func ObserveJobStatus(job *batchv1.Job, pods []corev1.Pod) ObservationResult {
 	}
 }
 
-// extractTerminationMessage reads the termination message from the first
-// terminated container of the most recently finished Pod.
-// Pods are sorted by FinishedAt (most recent first) since List order is unspecified.
+// extractTerminationMessage returns the termination message from the
+// terminated container with the most recent FinishedAt across all pods.
 func extractTerminationMessage(pods []corev1.Pod) string {
-	type podWithTime struct {
-		pod   *corev1.Pod
-		finAt metav1.Time
+	var latestInfo struct {
+		message string
+		finAt   metav1.Time
 	}
-	var candidates []podWithTime
+
 	for i := range pods {
 		p := &pods[i]
-		var latest metav1.Time
-		hasMsg := false
 		for _, cs := range p.Status.ContainerStatuses {
-			if cs.State.Terminated != nil && cs.State.Terminated.Message != "" {
-				hasMsg = true
-				if latest.IsZero() || cs.State.Terminated.FinishedAt.After(latest.Time) {
-					latest = cs.State.Terminated.FinishedAt
+			if term := cs.State.Terminated; term != nil && term.Message != "" {
+				if latestInfo.finAt.IsZero() || term.FinishedAt.After(latestInfo.finAt.Time) {
+					latestInfo.message = term.Message
+					latestInfo.finAt = term.FinishedAt
 				}
 			}
 		}
-		if hasMsg {
-			candidates = append(candidates, podWithTime{pod: p, finAt: latest})
-		}
 	}
-	if len(candidates) == 0 {
-		return ""
-	}
-	// Sort by FinishedAt descending (most recent first)
-	slices.SortFunc(candidates, func(a, b podWithTime) int {
-		switch {
-		case a.finAt.After(b.finAt.Time):
-			return -1
-		case b.finAt.After(a.finAt.Time):
-			return 1
-		default:
-			return 0
-		}
-	})
-	for _, cs := range candidates[0].pod.Status.ContainerStatuses {
-		if cs.State.Terminated != nil && cs.State.Terminated.Message != "" {
-			return strings.TrimSpace(cs.State.Terminated.Message)
-		}
-	}
-	return ""
+	return strings.TrimSpace(latestInfo.message)
 }
 
 func isJobFailed(job *batchv1.Job) bool {
