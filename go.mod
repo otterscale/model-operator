@@ -1,4 +1,4 @@
-module github.com/otterscale/operator-template
+module github.com/otterscale/model-operator
 
 go 1.26.0
 
