@@ -10,4 +10,13 @@ plugins:
   autoupdate.kubebuilder.io/v1-alpha: {}
 projectName: model-operator
 repo: github.com/otterscale/model-operator
+resources:
+- controller: true
+  domain: otterscale.io
+  external: true
+  group: model
+  kind: ModelArtifact
+  module: github.com/otterscale/api
+  path: github.com/otterscale/api/model/v1alpha1
+  version: v1alpha1
 version: "3"

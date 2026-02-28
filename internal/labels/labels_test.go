@@ -63,8 +63,8 @@ var _ = Describe("Standard", func() {
 					Expect(got).NotTo(HaveKey(labels.Version))
 				}
 			},
-			Entry("typical release", "model", "controller", "v0.1.0"),
-			Entry("empty version omits label", "model", "controller", ""),
+			Entry("typical release", "model-artifact", "controller", "v0.1.0"),
+			Entry("empty version omits label", "model-artifact", "controller", ""),
 			Entry("all empty strings", "", "", ""),
 		)
 	})
