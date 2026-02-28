@@ -36,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
-	batchv1 "k8s.io/api/batch/v1"
 
 	"github.com/otterscale/model-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
@@ -50,7 +49,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(batchv1.AddToScheme(scheme))
+
 	utilruntime.Must(modelv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
