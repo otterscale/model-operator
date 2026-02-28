@@ -137,6 +137,12 @@ var _ = Describe("BuildJob", func() {
 		Expect(*job.Spec.BackoffLimit).To(Equal(int32(0)))
 	})
 
+	It("should set ttlSecondsAfterFinished for log retention before cleanup", func() {
+		job := artifact.BuildJob(ma, kitImage, labels)
+		Expect(job.Spec.TTLSecondsAfterFinished).NotTo(BeNil())
+		Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(artifact.DefaultJobTTLSeconds))
+	})
+
 	It("should set restart policy to Never", func() {
 		job := artifact.BuildJob(ma, kitImage, labels)
 		Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))

@@ -27,7 +27,12 @@ import (
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
-// pipelineScript executes the kit import → pack → push pipeline.
+// pipelineScript executes the kit import → pack (for ModelPack) → push pipeline.
+//
+// kit import downloads to a temp dir and packs internally; it does NOT populate /workspace.
+// - ModelKit: import tags as OCI_TARGET directly, skip pack, push.
+// - ModelPack: import creates ModelKit, unpack to /workspace, repack with --use-model-pack.
+//
 // SECURITY: Env vars (HF_REPO, HF_REVISION, OCI_TARGET, etc.) come from the ModelArtifact CR.
 // The CRD schema validates Model, Revision, Registry, Repository, and Tag with Pattern restrictions
 // to prevent shell injection. Only users who can create ModelArtifacts have access.
@@ -39,9 +44,17 @@ if [ -n "${HF_REVISION:-}" ]; then import_args="$import_args --ref $HF_REVISION"
 if [ -n "${HF_TOKEN:-}" ]; then import_args="$import_args --token $HF_TOKEN"; fi
 kit import $import_args
 
-pack_flags=""
-if [ "$FORMAT" = "ModelPack" ]; then pack_flags="--use-model-pack"; fi
-kit pack . $pack_flags -t "$OCI_TARGET"
+import_tag="$HF_REPO:latest"
+if [ "$FORMAT" = "ModelPack" ]; then
+  # Unpack the ModelKit to workspace, then repack as ModelPack (kit import always creates ModelKit).
+  unpack_flags="-o"
+  if [ "${PLAIN_HTTP:-}" = "true" ]; then unpack_flags="$unpack_flags --plain-http"; fi
+  kit unpack $unpack_flags "$import_tag" -d /workspace
+  kit pack . --use-model-pack -t "$OCI_TARGET"
+else
+  # Tag the imported ModelKit as OCI_TARGET for push.
+  kit tag "$import_tag" "$OCI_TARGET"
+fi
 
 if [ -n "${OCI_USER:-}" ] && [ -n "${OCI_PASS:-}" ]; then
   kit login "$(echo "$OCI_TARGET" | cut -d'/' -f1)" -u "$OCI_USER" -p "$OCI_PASS"
@@ -100,7 +113,8 @@ func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map
 			Labels:       labels,
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: new(int32),
+			BackoffLimit:            new(int32),
+			TTLSecondsAfterFinished: new(DefaultJobTTLSeconds),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,

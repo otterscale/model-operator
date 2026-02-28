@@ -218,4 +218,49 @@ var _ = Describe("ModelArtifact Controller", func() {
 			Expect(artifactLabels).To(HaveKeyWithValue(labels.ManagedBy, "model-operator"))
 		})
 	})
+
+	Context("Terminal state with Job cleaned up by TTL", func() {
+		It("should preserve phase and digest when Job no longer exists", func() {
+			executeReconcile()
+
+			// Simulate pipeline reached Failed, then Job was cleaned up by TTL
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: namespace.Name}, ma)).To(Succeed())
+			ma.Status.Phase = modelv1alpha1.PhaseFailed
+			ma.Status.ObservedGeneration = ma.Generation
+			Expect(k8sClient.Status().Update(ctx, ma)).To(Succeed())
+
+			// Delete the Job to simulate TTL cleanup (Pod and Job gone)
+			var jobList batchv1.JobList
+			Expect(k8sClient.List(ctx, &jobList,
+				client.InNamespace(namespace.Name),
+				client.MatchingLabels(artifact.LabelsForArtifact(resourceName, "test")),
+			)).To(Succeed())
+			for i := range jobList.Items {
+				Expect(k8sClient.Delete(ctx, &jobList.Items[i])).To(Succeed())
+			}
+
+			// Reconcile: should preserve Failed phase, not create new Job, and attempt PVC cleanup
+			executeReconcile()
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: namespace.Name}, ma)).To(Succeed())
+			Expect(ma.Status.Phase).To(Equal(modelv1alpha1.PhaseFailed))
+
+			// Verify no new Job was created (deleted Job may linger briefly with DeletionTimestamp)
+			Eventually(func() int {
+				var jobs batchv1.JobList
+				Expect(k8sClient.List(ctx, &jobs,
+					client.InNamespace(namespace.Name),
+					client.MatchingLabels(artifact.LabelsForArtifact(resourceName, "test")),
+				)).To(Succeed())
+				// Count only Jobs not marked for deletion
+				var active int
+				for i := range jobs.Items {
+					if jobs.Items[i].DeletionTimestamp.IsZero() {
+						active++
+					}
+				}
+				return active
+			}, timeout, interval).Should(Equal(0))
+		})
+	})
 })
