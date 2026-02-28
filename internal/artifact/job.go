@@ -113,7 +113,8 @@ func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map
 			Labels:       labels,
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: new(int32),
+			BackoffLimit:            new(int32),
+			TTLSecondsAfterFinished: new(DefaultJobTTLSeconds),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,

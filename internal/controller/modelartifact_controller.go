@@ -102,8 +102,9 @@ func (r *ModelArtifactReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 // reconcileResources orchestrates the domain-level resource sync in order.
 func (r *ModelArtifactReconciler) reconcileResources(ctx context.Context, ma *modelv1alpha1.ModelArtifact) error {
-	// Idempotent: skip if already succeeded and no spec change
-	if ma.Status.Phase == modelv1alpha1.PhaseSucceeded && ma.Status.ObservedGeneration == ma.Generation {
+	// Idempotent: skip if already in terminal state and no spec change
+	if (ma.Status.Phase == modelv1alpha1.PhaseSucceeded || ma.Status.Phase == modelv1alpha1.PhaseFailed) &&
+		ma.Status.ObservedGeneration == ma.Generation {
 		return nil
 	}
 
@@ -198,7 +199,25 @@ func (r *ModelArtifactReconciler) updateStatus(ctx context.Context, ma *modelv1a
 		return artifact.ObservationResult{}, err
 	}
 
-	obs := artifact.ObserveJobStatus(job, pods)
+	var obs artifact.ObservationResult
+	if job != nil {
+		obs = artifact.ObserveJobStatus(job, pods)
+	} else if ma.Status.Phase == modelv1alpha1.PhaseSucceeded || ma.Status.Phase == modelv1alpha1.PhaseFailed {
+		// Job was cleaned up by TTL; preserve terminal state so DeletePVC can proceed
+		ready := metav1.ConditionFalse
+		if ma.Status.Phase == modelv1alpha1.PhaseSucceeded {
+			ready = metav1.ConditionTrue
+		}
+		obs = artifact.ObservationResult{
+			Phase:   ma.Status.Phase,
+			Ready:   ready,
+			Reason:  "Completed",
+			Message: "Pipeline completed; Job was cleaned up",
+			Digest:  ma.Status.Digest,
+		}
+	} else {
+		obs = artifact.ObserveJobStatus(nil, pods)
+	}
 
 	newStatus := ma.Status.DeepCopy()
 	newStatus.ObservedGeneration = ma.Generation

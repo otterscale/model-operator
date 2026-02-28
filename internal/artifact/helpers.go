@@ -36,6 +36,11 @@ const (
 
 	// PVCSuffix is appended to the ModelArtifact name to form the PVC name.
 	PVCSuffix = "-workspace"
+
+	// DefaultJobTTLSeconds is the time after Job completion (succeeded or failed)
+	// before Kubernetes automatically deletes it. Allows users to view logs via kubectl
+	// before cleanup; after deletion, the PVC can be released.
+	DefaultJobTTLSeconds = int32(3600)
 )
 
 // LabelsForArtifact returns the standard set of labels for resources managed
