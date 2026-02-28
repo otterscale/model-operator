@@ -37,8 +37,8 @@ func newTestArtifact() *modelv1alpha1.ModelArtifact {
 		Spec: modelv1alpha1.ModelArtifactSpec{
 			Source: modelv1alpha1.ModelSource{
 				HuggingFace: &modelv1alpha1.HuggingFaceSource{
-					Repository: "microsoft/phi-4",
-					Revision:   "main",
+					Model:    "microsoft/phi-4",
+					Revision: "main",
 					TokenSecretRef: &modelv1alpha1.SecretKeySelector{
 						Name: "hf-token",
 						Key:  "token",
@@ -46,7 +46,8 @@ func newTestArtifact() *modelv1alpha1.ModelArtifact {
 				},
 			},
 			Target: modelv1alpha1.OCITarget{
-				Repository: "ghcr.io/myorg/models/phi-4",
+				Registry:   "ghcr.io",
+				Repository: "myorg/models/phi-4",
 				Tag:        "v1.0",
 				CredentialsSecretRef: &modelv1alpha1.SecretReference{
 					Name: "oci-creds",
@@ -235,11 +236,12 @@ var _ = Describe("BuildJob", func() {
 				Spec: modelv1alpha1.ModelArtifactSpec{
 					Source: modelv1alpha1.ModelSource{
 						HuggingFace: &modelv1alpha1.HuggingFaceSource{
-							Repository: "org/model",
+							Model: "org/model",
 						},
 					},
 					Target: modelv1alpha1.OCITarget{
-						Repository: "registry.local/models/small",
+						Registry:   "registry.local",
+						Repository: "models/small",
 					},
 					Format: modelv1alpha1.PackFormatModelKit,
 					Storage: modelv1alpha1.StorageSpec{
@@ -304,10 +306,11 @@ var _ = Describe("BuildJob", func() {
 
 var _ = Describe("OCIReference", func() {
 	DescribeTable("tag resolution",
-		func(repo, tag, expected string) {
+		func(registry, repo, tag, expected string) {
 			ma := &modelv1alpha1.ModelArtifact{
 				Spec: modelv1alpha1.ModelArtifactSpec{
 					Target: modelv1alpha1.OCITarget{
+						Registry:   registry,
 						Repository: repo,
 						Tag:        tag,
 					},
@@ -315,8 +318,9 @@ var _ = Describe("OCIReference", func() {
 			}
 			Expect(artifact.OCIReference(ma)).To(Equal(expected))
 		},
-		Entry("with explicit tag", "ghcr.io/org/model", "v1.0", "ghcr.io/org/model:v1.0"),
-		Entry("defaults to latest when tag is empty", "ghcr.io/org/model", "", "ghcr.io/org/model:latest"),
+		Entry("with explicit tag", "ghcr.io", "org/model", "v1.0", "ghcr.io/org/model:v1.0"),
+		Entry("defaults to latest when tag is empty", "ghcr.io", "org/model", "", "ghcr.io/org/model:latest"),
+		Entry("with port in registry", "registry.local:5001", "facebook/opt-125m", "dev", "registry.local:5001/facebook/opt-125m:dev"),
 	)
 })
 

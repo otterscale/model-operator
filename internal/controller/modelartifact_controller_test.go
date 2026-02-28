@@ -61,11 +61,12 @@ var _ = Describe("ModelArtifact Controller", func() {
 			Spec: modelv1alpha1.ModelArtifactSpec{
 				Source: modelv1alpha1.ModelSource{
 					HuggingFace: &modelv1alpha1.HuggingFaceSource{
-						Repository: "microsoft/phi-4",
+						Model: "microsoft/phi-4",
 					},
 				},
 				Target: modelv1alpha1.OCITarget{
-					Repository: "ghcr.io/test/phi-4",
+					Registry:   "ghcr.io",
+					Repository: "test/phi-4",
 					Tag:        "latest",
 				},
 				Format: modelv1alpha1.PackFormatModelPack,
