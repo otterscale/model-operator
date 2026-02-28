@@ -20,6 +20,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -95,6 +96,11 @@ func (r *ModelArtifactReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if deleteErr := artifact.DeletePVC(ctx, r.Client, &ma); deleteErr != nil {
 			logger.Error(deleteErr, "Failed to delete workspace PVC after completion")
 		}
+	}
+
+	// 5. Requeue to poll for digest when Job succeeded but digest not yet available from pod termination message
+	if obs.Phase == modelv1alpha1.PhaseSucceeded && obs.Digest == "" {
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
