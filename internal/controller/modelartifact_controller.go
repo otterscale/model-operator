@@ -120,6 +120,9 @@ func (r *ModelArtifactReconciler) reconcileResources(ctx context.Context, ma *mo
 		if err := artifact.DeletePVC(ctx, r.Client, ma); err != nil {
 			return err
 		}
+		// End reconciliation here. The status will be updated to reflect the cleanup,
+		// and the next reconciliation loop will create the new PVC and Job.
+		return nil
 	}
 
 	if err := artifact.EnsurePVC(ctx, r.Client, r.Scheme, ma, labels); err != nil {
