@@ -47,25 +47,15 @@ rules:
 - apiGroups:
   - model.otterscale.io
   resources:
-  - modelartifacts
+  - artifacts
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - model.otterscale.io
   resources:
-  - modelartifacts/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - model.otterscale.io
-  resources:
-  - modelartifacts/status
+  - artifacts/status
   verbs:
   - get
   - patch

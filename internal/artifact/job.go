@@ -33,26 +33,21 @@ import (
 // - ModelKit: import tags as OCI_TARGET directly, skip pack, push.
 // - ModelPack: import creates ModelKit, unpack to /workspace, repack with --use-model-pack.
 //
-// SECURITY: Env vars (HF_REPO, HF_REVISION, OCI_TARGET, etc.) come from the ModelArtifact CR.
+// SECURITY: Env vars (HF_REPO, HF_REVISION, OCI_TARGET, etc.) come from the Artifact CR.
 // The CRD schema validates Model, Revision, Registry, Repository, and Tag with Pattern restrictions
-// to prevent shell injection. Only users who can create ModelArtifacts have access.
+// to prevent shell injection. Only users who can create Artifacts have access.
 const pipelineScript = `set -euo pipefail
 cd /workspace
 
-import_args="$HF_REPO"
-if [ -n "${HF_REVISION:-}" ]; then import_args="$import_args --ref $HF_REVISION"; fi
-if [ -n "${HF_TOKEN:-}" ]; then import_args="$import_args --token $HF_TOKEN"; fi
-kit import $import_args
+kit import "$HF_REPO" \
+  ${HF_REVISION:+--ref "$HF_REVISION"} \
+  ${HF_TOKEN:+--token "$HF_TOKEN"}
 
 import_tag="$HF_REPO:latest"
 if [ "$FORMAT" = "ModelPack" ]; then
-  # Unpack the ModelKit to workspace, then repack as ModelPack (kit import always creates ModelKit).
-  unpack_flags="-o"
-  if [ "${PLAIN_HTTP:-}" = "true" ]; then unpack_flags="$unpack_flags --plain-http"; fi
-  kit unpack $unpack_flags "$import_tag" -d /workspace
+  kit unpack -o ${PLAIN_HTTP:+--plain-http} "$import_tag" -d /workspace
   kit pack . --use-model-pack -t "$OCI_TARGET"
 else
-  # Tag the imported ModelKit as OCI_TARGET for push.
   kit tag "$import_tag" "$OCI_TARGET"
 fi
 
@@ -60,10 +55,7 @@ if [ -n "${OCI_USER:-}" ] && [ -n "${OCI_PASS:-}" ]; then
   kit login "$(echo "$OCI_TARGET" | cut -d'/' -f1)" -u "$OCI_USER" -p "$OCI_PASS"
 fi
 
-push_flags=""
-if [ "${PLAIN_HTTP:-}" = "true" ]; then push_flags="--plain-http"; fi
-
-output=$(kit push $push_flags "$OCI_TARGET" 2>&1)
+output=$(kit push ${PLAIN_HTTP:+--plain-http} "$OCI_TARGET" 2>&1)
 echo "$output" >&2
 digest=$(echo "$output" | grep -oE 'sha256:[a-f0-9]{64}' | tail -1)
 echo -n "$digest" > /dev/termination-log
@@ -71,8 +63,8 @@ echo -n "$digest" > /dev/termination-log
 
 // BuildPVC constructs a PersistentVolumeClaim for the import/pack/push workspace.
 // The PVC name is deterministic (<artifact-name>-workspace) since there is a 1:1
-// relationship between a ModelArtifact and its workspace PVC.
-func BuildPVC(artifact *modelv1alpha1.ModelArtifact, labels map[string]string) *corev1.PersistentVolumeClaim {
+// relationship between an Artifact and its workspace PVC.
+func BuildPVC(artifact *modelv1alpha1.Artifact, labels map[string]string) *corev1.PersistentVolumeClaim {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PVCName(artifact.Name),
@@ -99,11 +91,11 @@ func BuildPVC(artifact *modelv1alpha1.ModelArtifact, labels map[string]string) *
 // BuildJob constructs a batch/v1 Job that executes the kit import → pack → push pipeline.
 //
 // Design choices:
-//   - GenerateName avoids name collisions when the ModelArtifact spec changes
+//   - GenerateName avoids name collisions when the Artifact spec changes
 //   - backoffLimit=0 prevents the Job from retrying on its own; the controller handles retries
 //   - terminationMessagePath writes the OCI digest for the controller to read
 //   - Secrets are injected via env valueFrom, never passing through the controller
-func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map[string]string) *batchv1.Job {
+func BuildJob(artifact *modelv1alpha1.Artifact, kitImage string, labels map[string]string) *batchv1.Job {
 	env := buildEnvVars(artifact)
 
 	job := &batchv1.Job{
@@ -120,7 +112,14 @@ func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					AutomountServiceAccountToken: new(false),
+					RestartPolicy:                corev1.RestartPolicyNever,
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: new(true),
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:    "kit",
@@ -128,6 +127,12 @@ func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map
 							Command: []string{"/bin/sh", "-c"},
 							Args:    []string{pipelineScript},
 							Env:     env,
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: new(false),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      WorkspaceVolumeName,
@@ -163,7 +168,7 @@ func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map
 }
 
 // OCIReference returns the full OCI target reference for kit pack/push.
-func OCIReference(artifact *modelv1alpha1.ModelArtifact) string {
+func OCIReference(artifact *modelv1alpha1.Artifact) string {
 	tag := artifact.Spec.Target.Tag
 	if tag == "" {
 		tag = "latest"
@@ -171,7 +176,7 @@ func OCIReference(artifact *modelv1alpha1.ModelArtifact) string {
 	return fmt.Sprintf("%s/%s:%s", artifact.Spec.Target.Registry, artifact.Spec.Target.Repository, tag)
 }
 
-func buildEnvVars(artifact *modelv1alpha1.ModelArtifact) []corev1.EnvVar {
+func buildEnvVars(artifact *modelv1alpha1.Artifact) []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "OCI_TARGET", Value: OCIReference(artifact)},
 		{Name: "FORMAT", Value: string(artifact.Spec.Format)},

@@ -35,7 +35,7 @@ type ObservationResult struct {
 	Digest  string
 }
 
-// ObserveJobStatus derives the ModelArtifact phase, condition, and digest
+// ObserveJobStatus derives the Artifact phase, condition, and digest
 // from the current state of a Job and its owned Pods.
 //
 // When job is nil, if fallbackPhase is Succeeded or Failed, returns a preserved
