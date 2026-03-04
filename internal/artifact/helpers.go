@@ -43,6 +43,13 @@ const (
 	DefaultJobTTLSeconds = int32(3600)
 )
 
+// SelectorLabelsForArtifact returns the label set used for MatchingLabels
+// queries. It excludes Version so that operator upgrades do not cause
+// in-flight Jobs to become invisible.
+func SelectorLabelsForArtifact(artifactName string) map[string]string {
+	return labels.Selector(artifactName, ComponentArtifact)
+}
+
 // LabelsForArtifact returns the standard set of labels for resources managed
 // by an Artifact (Jobs, PVCs). It builds on the shared labels.Standard() base.
 func LabelsForArtifact(artifactName, version string) map[string]string {

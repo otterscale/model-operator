@@ -61,9 +61,11 @@ func EnsurePVC(ctx context.Context, c client.Client, scheme *runtime.Scheme, ma 
 }
 
 // EnsureJob finds an existing owned Job or creates a new one.
+// selectorLabels is used for the lookup query (version-independent);
+// metadataLabels is applied to newly created Jobs (includes version).
 // Returns the job (existing or newly created), whether it was created, and any error.
-func EnsureJob(ctx context.Context, c client.Client, scheme *runtime.Scheme, ma *modelv1alpha1.Artifact, kitImage string, labels map[string]string) (*batchv1.Job, bool, error) {
-	job, err := FindOwnedJob(ctx, c, ma.Namespace, labels, ma)
+func EnsureJob(ctx context.Context, c client.Client, scheme *runtime.Scheme, ma *modelv1alpha1.Artifact, kitImage string, selectorLabels, metadataLabels map[string]string) (*batchv1.Job, bool, error) {
+	job, err := FindOwnedJob(ctx, c, ma.Namespace, selectorLabels, ma)
 	if err != nil {
 		return nil, false, err
 	}
@@ -71,7 +73,7 @@ func EnsureJob(ctx context.Context, c client.Client, scheme *runtime.Scheme, ma 
 		return job, false, nil
 	}
 
-	job = BuildJob(ma, kitImage, labels)
+	job = BuildJob(ma, kitImage, metadataLabels)
 	if err := ctrlutil.SetControllerReference(ma, job, scheme); err != nil {
 		return nil, false, fmt.Errorf("setting Job owner reference: %w", err)
 	}

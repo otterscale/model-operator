@@ -149,7 +149,7 @@ var _ = Describe("Artifact Controller", func() {
 			var jobList batchv1.JobList
 			Expect(k8sClient.List(ctx, &jobList,
 				client.InNamespace(namespace.Name),
-				client.MatchingLabels(artifact.LabelsForArtifact(resourceName, "test")),
+				client.MatchingLabels(artifact.SelectorLabelsForArtifact(resourceName)),
 			)).To(Succeed())
 			Expect(jobList.Items).To(HaveLen(1))
 			job := jobList.Items[0]
@@ -186,7 +186,7 @@ var _ = Describe("Artifact Controller", func() {
 			var jobList batchv1.JobList
 			Expect(k8sClient.List(ctx, &jobList,
 				client.InNamespace(namespace.Name),
-				client.MatchingLabels(artifact.LabelsForArtifact(resourceName, "test")),
+				client.MatchingLabels(artifact.SelectorLabelsForArtifact(resourceName)),
 			)).To(Succeed())
 			Expect(jobList.Items).To(HaveLen(1))
 		})
@@ -233,7 +233,7 @@ var _ = Describe("Artifact Controller", func() {
 			var jobList batchv1.JobList
 			Expect(k8sClient.List(ctx, &jobList,
 				client.InNamespace(namespace.Name),
-				client.MatchingLabels(artifact.LabelsForArtifact(resourceName, "test")),
+				client.MatchingLabels(artifact.SelectorLabelsForArtifact(resourceName)),
 			)).To(Succeed())
 			for i := range jobList.Items {
 				Expect(k8sClient.Delete(ctx, &jobList.Items[i])).To(Succeed())
@@ -250,7 +250,7 @@ var _ = Describe("Artifact Controller", func() {
 				var jobs batchv1.JobList
 				Expect(k8sClient.List(ctx, &jobs,
 					client.InNamespace(namespace.Name),
-					client.MatchingLabels(artifact.LabelsForArtifact(resourceName, "test")),
+					client.MatchingLabels(artifact.SelectorLabelsForArtifact(resourceName)),
 				)).To(Succeed())
 				// Count only Jobs not marked for deletion
 				var active int

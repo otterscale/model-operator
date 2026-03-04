@@ -39,20 +39,15 @@ import (
 const pipelineScript = `set -euo pipefail
 cd /workspace
 
-import_args="$HF_REPO"
-if [ -n "${HF_REVISION:-}" ]; then import_args="$import_args --ref $HF_REVISION"; fi
-if [ -n "${HF_TOKEN:-}" ]; then import_args="$import_args --token $HF_TOKEN"; fi
-kit import $import_args
+kit import "$HF_REPO" \
+  ${HF_REVISION:+--ref "$HF_REVISION"} \
+  ${HF_TOKEN:+--token "$HF_TOKEN"}
 
 import_tag="$HF_REPO:latest"
 if [ "$FORMAT" = "ModelPack" ]; then
-  # Unpack the ModelKit to workspace, then repack as ModelPack (kit import always creates ModelKit).
-  unpack_flags="-o"
-  if [ "${PLAIN_HTTP:-}" = "true" ]; then unpack_flags="$unpack_flags --plain-http"; fi
-  kit unpack $unpack_flags "$import_tag" -d /workspace
+  kit unpack -o ${PLAIN_HTTP:+--plain-http} "$import_tag" -d /workspace
   kit pack . --use-model-pack -t "$OCI_TARGET"
 else
-  # Tag the imported ModelKit as OCI_TARGET for push.
   kit tag "$import_tag" "$OCI_TARGET"
 fi
 
@@ -60,10 +55,7 @@ if [ -n "${OCI_USER:-}" ] && [ -n "${OCI_PASS:-}" ]; then
   kit login "$(echo "$OCI_TARGET" | cut -d'/' -f1)" -u "$OCI_USER" -p "$OCI_PASS"
 fi
 
-push_flags=""
-if [ "${PLAIN_HTTP:-}" = "true" ]; then push_flags="--plain-http"; fi
-
-output=$(kit push $push_flags "$OCI_TARGET" 2>&1)
+output=$(kit push ${PLAIN_HTTP:+--plain-http} "$OCI_TARGET" 2>&1)
 echo "$output" >&2
 digest=$(echo "$output" | grep -oE 'sha256:[a-f0-9]{64}' | tail -1)
 echo -n "$digest" > /dev/termination-log
@@ -120,7 +112,14 @@ func BuildJob(artifact *modelv1alpha1.Artifact, kitImage string, labels map[stri
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					AutomountServiceAccountToken: new(false),
+					RestartPolicy:                corev1.RestartPolicyNever,
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: new(true),
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:    "kit",
@@ -128,6 +127,12 @@ func BuildJob(artifact *modelv1alpha1.Artifact, kitImage string, labels map[stri
 							Command: []string{"/bin/sh", "-c"},
 							Args:    []string{pipelineScript},
 							Env:     env,
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: new(false),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      WorkspaceVolumeName,

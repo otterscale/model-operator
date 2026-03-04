@@ -55,9 +55,8 @@ type ArtifactReconciler struct {
 }
 
 // RBAC Permissions required by the controller:
-// +kubebuilder:rbac:groups=model.otterscale.io,resources=artifacts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=model.otterscale.io,resources=artifacts,verbs=get;list;watch
 // +kubebuilder:rbac:groups=model.otterscale.io,resources=artifacts/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=model.otterscale.io,resources=artifacts/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list
@@ -110,14 +109,15 @@ func (r *ArtifactReconciler) reconcileResources(ctx context.Context, ma *modelv1
 		return nil
 	}
 
-	labels := artifact.LabelsForArtifact(ma.Name, r.Version)
+	selectorLabels := artifact.SelectorLabelsForArtifact(ma.Name)
+	metadataLabels := artifact.LabelsForArtifact(ma.Name, r.Version)
 
 	// If generation changed, clean up any stale Jobs from previous generation
 	if ma.Status.ObservedGeneration != 0 && ma.Status.ObservedGeneration < ma.Generation {
 		log.FromContext(ctx).Info("Spec changed, cleaning up stale resources",
 			"oldGeneration", ma.Status.ObservedGeneration,
 			"newGeneration", ma.Generation)
-		if err := artifact.CleanupStaleJobs(ctx, r.Client, ma, labels); err != nil {
+		if err := artifact.CleanupStaleJobs(ctx, r.Client, ma, selectorLabels); err != nil {
 			return err
 		}
 		if err := artifact.DeletePVC(ctx, r.Client, ma); err != nil {
@@ -128,11 +128,11 @@ func (r *ArtifactReconciler) reconcileResources(ctx context.Context, ma *modelv1
 		return nil
 	}
 
-	if err := artifact.EnsurePVC(ctx, r.Client, r.Scheme, ma, labels); err != nil {
+	if err := artifact.EnsurePVC(ctx, r.Client, r.Scheme, ma, metadataLabels); err != nil {
 		return err
 	}
 
-	job, created, err := artifact.EnsureJob(ctx, r.Client, r.Scheme, ma, r.KitImage, labels)
+	job, created, err := artifact.EnsureJob(ctx, r.Client, r.Scheme, ma, r.KitImage, selectorLabels, metadataLabels)
 	if err != nil {
 		return err
 	}
@@ -190,8 +190,8 @@ func (r *ArtifactReconciler) listJobPods(ctx context.Context, job *batchv1.Job) 
 // updateStatus calculates the status based on the current observed state and patches the resource.
 // It returns the ObservationResult for the caller to decide on post-status actions (e.g. PVC cleanup).
 func (r *ArtifactReconciler) updateStatus(ctx context.Context, ma *modelv1alpha1.Artifact) (artifact.ObservationResult, error) {
-	labels := artifact.LabelsForArtifact(ma.Name, r.Version)
-	job, err := artifact.FindOwnedJob(ctx, r.Client, ma.Namespace, labels, ma)
+	selectorLabels := artifact.SelectorLabelsForArtifact(ma.Name)
+	job, err := artifact.FindOwnedJob(ctx, r.Client, ma.Namespace, selectorLabels, ma)
 	if err != nil {
 		return artifact.ObservationResult{}, err
 	}
@@ -248,9 +248,13 @@ func (r *ArtifactReconciler) updateStatus(ctx context.Context, ma *modelv1alpha1
 
 	log.FromContext(ctx).Info("Artifact status updated", "phase", obs.Phase, "digest", obs.Digest)
 
-	if obs.Phase == modelv1alpha1.PhaseSucceeded || obs.Phase == modelv1alpha1.PhaseFailed {
-		r.Recorder.Eventf(ma, nil, corev1.EventTypeNormal, "Reconciled", "Reconcile",
-			"Artifact pipeline completed with phase %s", obs.Phase)
+	switch obs.Phase {
+	case modelv1alpha1.PhaseSucceeded:
+		r.Recorder.Eventf(ma, nil, corev1.EventTypeNormal, "Succeeded", "Reconcile",
+			"Artifact pushed successfully")
+	case modelv1alpha1.PhaseFailed:
+		r.Recorder.Eventf(ma, nil, corev1.EventTypeWarning, "Failed", "Reconcile",
+			"Artifact pipeline failed: %s", obs.Message)
 	}
 
 	return obs, nil

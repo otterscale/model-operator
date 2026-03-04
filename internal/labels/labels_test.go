@@ -23,6 +23,29 @@ import (
 	"github.com/otterscale/model-operator/internal/labels"
 )
 
+var _ = Describe("Selector", func() {
+	It("contains name, component, partOf and managedBy but NOT version", func() {
+		got := labels.Selector("my-app", "controller")
+
+		Expect(got).To(Equal(map[string]string{
+			labels.Name:      "my-app",
+			labels.Component: "controller",
+			labels.PartOf:    labels.System,
+			labels.ManagedBy: labels.Operator,
+		}))
+		Expect(got).NotTo(HaveKey(labels.Version))
+	})
+
+	It("is a subset of Standard with version", func() {
+		sel := labels.Selector("my-app", "controller")
+		std := labels.Standard("my-app", "controller", "v1.0.0")
+
+		for k, v := range sel {
+			Expect(std).To(HaveKeyWithValue(k, v))
+		}
+	})
+})
+
 var _ = Describe("Standard", func() {
 	Describe("return value completeness", func() {
 		It("contains exactly the expected labels when version is non-empty", func() {

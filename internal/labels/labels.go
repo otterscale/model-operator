@@ -43,19 +43,26 @@ const (
 	Operator = "model-operator"
 )
 
-// Standard returns the base set of Kubernetes recommended labels for all
-// operator-managed resources. Domain-specific labels (e.g. model-specific)
-// should be added by the caller after invoking this function.
-//
-// If version is empty, the app.kubernetes.io/version label is omitted, as an
-// empty version label carries no semantic meaning per K8s conventions.
-func Standard(name, component, version string) map[string]string {
-	m := map[string]string{
+// Selector returns the minimal label set used for MatchingLabels queries.
+// It deliberately excludes Version so that operator upgrades do not break
+// resource lookups for in-flight Jobs created by a previous version.
+func Selector(name, component string) map[string]string {
+	return map[string]string{
 		Name:      name,
 		Component: component,
 		PartOf:    System,
 		ManagedBy: Operator,
 	}
+}
+
+// Standard returns the full set of Kubernetes recommended labels for all
+// operator-managed resources. Use this when creating or labelling resources.
+// Use Selector() when querying resources via MatchingLabels.
+//
+// If version is empty, the app.kubernetes.io/version label is omitted, as an
+// empty version label carries no semantic meaning per K8s conventions.
+func Standard(name, component, version string) map[string]string {
+	m := Selector(name, component)
 	if version != "" {
 		m[Version] = version
 	}

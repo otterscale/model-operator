@@ -49,19 +49,9 @@ rules:
   resources:
   - artifacts
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
-- apiGroups:
-  - model.otterscale.io
-  resources:
-  - artifacts/finalizers
-  verbs:
-  - update
 - apiGroups:
   - model.otterscale.io
   resources:
