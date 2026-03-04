@@ -28,13 +28,13 @@ import (
 	"github.com/otterscale/model-operator/internal/artifact"
 )
 
-func newTestArtifact() *modelv1alpha1.ModelArtifact {
-	return &modelv1alpha1.ModelArtifact{
+func newTestArtifact() *modelv1alpha1.Artifact {
+	return &modelv1alpha1.Artifact{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "phi-4",
 			Namespace: "ml-team",
 		},
-		Spec: modelv1alpha1.ModelArtifactSpec{
+		Spec: modelv1alpha1.ArtifactSpec{
 			Source: modelv1alpha1.ModelSource{
 				HuggingFace: &modelv1alpha1.HuggingFaceSource{
 					Model:    "microsoft/phi-4",
@@ -63,7 +63,7 @@ func newTestArtifact() *modelv1alpha1.ModelArtifact {
 
 var _ = Describe("BuildPVC", func() {
 	var (
-		ma     *modelv1alpha1.ModelArtifact
+		ma     *modelv1alpha1.Artifact
 		labels map[string]string
 	)
 
@@ -109,7 +109,7 @@ var _ = Describe("BuildPVC", func() {
 
 var _ = Describe("BuildJob", func() {
 	var (
-		ma       *modelv1alpha1.ModelArtifact
+		ma       *modelv1alpha1.Artifact
 		labels   map[string]string
 		kitImage string
 	)
@@ -234,12 +234,12 @@ var _ = Describe("BuildJob", func() {
 
 	Context("without optional fields", func() {
 		BeforeEach(func() {
-			ma = &modelv1alpha1.ModelArtifact{
+			ma = &modelv1alpha1.Artifact{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "small-model",
 					Namespace: "default",
 				},
-				Spec: modelv1alpha1.ModelArtifactSpec{
+				Spec: modelv1alpha1.ArtifactSpec{
 					Source: modelv1alpha1.ModelSource{
 						HuggingFace: &modelv1alpha1.HuggingFaceSource{
 							Model: "org/model",
@@ -313,8 +313,8 @@ var _ = Describe("BuildJob", func() {
 var _ = Describe("OCIReference", func() {
 	DescribeTable("tag resolution",
 		func(registry, repo, tag, expected string) {
-			ma := &modelv1alpha1.ModelArtifact{
-				Spec: modelv1alpha1.ModelArtifactSpec{
+			ma := &modelv1alpha1.Artifact{
+				Spec: modelv1alpha1.ArtifactSpec{
 					Target: modelv1alpha1.OCITarget{
 						Registry:   registry,
 						Repository: repo,

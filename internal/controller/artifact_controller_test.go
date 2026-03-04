@@ -39,7 +39,7 @@ import (
 	"github.com/otterscale/model-operator/internal/labels"
 )
 
-var _ = Describe("ModelArtifact Controller", func() {
+var _ = Describe("Artifact Controller", func() {
 	const (
 		timeout  = time.Second * 10
 		interval = time.Millisecond * 250
@@ -47,18 +47,18 @@ var _ = Describe("ModelArtifact Controller", func() {
 
 	var (
 		ctx          context.Context
-		reconciler   *ModelArtifactReconciler
-		ma           *modelv1alpha1.ModelArtifact
+		reconciler   *ArtifactReconciler
+		ma           *modelv1alpha1.Artifact
 		resourceName string
 		namespace    *corev1.Namespace
 	)
 
 	// --- Helpers ---
 
-	makeModelArtifact := func(name, ns string, mods ...func(*modelv1alpha1.ModelArtifact)) *modelv1alpha1.ModelArtifact {
-		a := &modelv1alpha1.ModelArtifact{
+	makeArtifact := func(name, ns string, mods ...func(*modelv1alpha1.Artifact)) *modelv1alpha1.Artifact {
+		a := &modelv1alpha1.Artifact{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-			Spec: modelv1alpha1.ModelArtifactSpec{
+			Spec: modelv1alpha1.ArtifactSpec{
 				Source: modelv1alpha1.ModelSource{
 					HuggingFace: &modelv1alpha1.HuggingFaceSource{
 						Model: "microsoft/phi-4",
@@ -107,14 +107,14 @@ var _ = Describe("ModelArtifact Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
-		reconciler = &ModelArtifactReconciler{
+		reconciler = &ArtifactReconciler{
 			Client:   k8sClient,
 			Scheme:   k8sClient.Scheme(),
 			Version:  "test",
 			KitImage: "ghcr.io/jozu-ai/kit:latest",
 			Recorder: events.NewFakeRecorder(100),
 		}
-		ma = makeModelArtifact(resourceName, namespace.Name)
+		ma = makeArtifact(resourceName, namespace.Name)
 	})
 
 	JustBeforeEach(func() {
@@ -193,7 +193,7 @@ var _ = Describe("ModelArtifact Controller", func() {
 	})
 
 	Context("Deleted Resource", func() {
-		It("should not reconcile a deleted ModelArtifact", func() {
+		It("should not reconcile a deleted Artifact", func() {
 			Expect(k8sClient.Delete(ctx, ma)).To(Succeed())
 			Eventually(func() bool {
 				return errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{

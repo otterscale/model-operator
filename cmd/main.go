@@ -185,14 +185,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.ModelArtifactReconciler{
+	if err := (&controller.ArtifactReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Version:  version,
 		KitImage: kitImage,
-		Recorder: mgr.GetEventRecorder("modelartifact-controller"),
+		Recorder: mgr.GetEventRecorder("artifact-controller"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "ModelArtifact")
+		setupLog.Error(err, "Failed to create controller", "controller", "Artifact")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

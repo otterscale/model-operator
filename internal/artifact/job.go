@@ -33,9 +33,9 @@ import (
 // - ModelKit: import tags as OCI_TARGET directly, skip pack, push.
 // - ModelPack: import creates ModelKit, unpack to /workspace, repack with --use-model-pack.
 //
-// SECURITY: Env vars (HF_REPO, HF_REVISION, OCI_TARGET, etc.) come from the ModelArtifact CR.
+// SECURITY: Env vars (HF_REPO, HF_REVISION, OCI_TARGET, etc.) come from the Artifact CR.
 // The CRD schema validates Model, Revision, Registry, Repository, and Tag with Pattern restrictions
-// to prevent shell injection. Only users who can create ModelArtifacts have access.
+// to prevent shell injection. Only users who can create Artifacts have access.
 const pipelineScript = `set -euo pipefail
 cd /workspace
 
@@ -71,8 +71,8 @@ echo -n "$digest" > /dev/termination-log
 
 // BuildPVC constructs a PersistentVolumeClaim for the import/pack/push workspace.
 // The PVC name is deterministic (<artifact-name>-workspace) since there is a 1:1
-// relationship between a ModelArtifact and its workspace PVC.
-func BuildPVC(artifact *modelv1alpha1.ModelArtifact, labels map[string]string) *corev1.PersistentVolumeClaim {
+// relationship between an Artifact and its workspace PVC.
+func BuildPVC(artifact *modelv1alpha1.Artifact, labels map[string]string) *corev1.PersistentVolumeClaim {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PVCName(artifact.Name),
@@ -99,11 +99,11 @@ func BuildPVC(artifact *modelv1alpha1.ModelArtifact, labels map[string]string) *
 // BuildJob constructs a batch/v1 Job that executes the kit import → pack → push pipeline.
 //
 // Design choices:
-//   - GenerateName avoids name collisions when the ModelArtifact spec changes
+//   - GenerateName avoids name collisions when the Artifact spec changes
 //   - backoffLimit=0 prevents the Job from retrying on its own; the controller handles retries
 //   - terminationMessagePath writes the OCI digest for the controller to read
 //   - Secrets are injected via env valueFrom, never passing through the controller
-func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map[string]string) *batchv1.Job {
+func BuildJob(artifact *modelv1alpha1.Artifact, kitImage string, labels map[string]string) *batchv1.Job {
 	env := buildEnvVars(artifact)
 
 	job := &batchv1.Job{
@@ -163,7 +163,7 @@ func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map
 }
 
 // OCIReference returns the full OCI target reference for kit pack/push.
-func OCIReference(artifact *modelv1alpha1.ModelArtifact) string {
+func OCIReference(artifact *modelv1alpha1.Artifact) string {
 	tag := artifact.Spec.Target.Tag
 	if tag == "" {
 		tag = "latest"
@@ -171,7 +171,7 @@ func OCIReference(artifact *modelv1alpha1.ModelArtifact) string {
 	return fmt.Sprintf("%s/%s:%s", artifact.Spec.Target.Registry, artifact.Spec.Target.Repository, tag)
 }
 
-func buildEnvVars(artifact *modelv1alpha1.ModelArtifact) []corev1.EnvVar {
+func buildEnvVars(artifact *modelv1alpha1.Artifact) []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "OCI_TARGET", Value: OCIReference(artifact)},
 		{Name: "FORMAT", Value: string(artifact.Spec.Format)},

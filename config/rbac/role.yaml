@@ -47,7 +47,7 @@ rules:
 - apiGroups:
   - model.otterscale.io
   resources:
-  - modelartifacts
+  - artifacts
   verbs:
   - create
   - delete
@@ -59,13 +59,13 @@ rules:
 - apiGroups:
   - model.otterscale.io
   resources:
-  - modelartifacts/finalizers
+  - artifacts/finalizers
   verbs:
   - update
 - apiGroups:
   - model.otterscale.io
   resources:
-  - modelartifacts/status
+  - artifacts/status
   verbs:
   - get
   - patch

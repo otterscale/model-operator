@@ -39,14 +39,14 @@ import (
 	"github.com/otterscale/model-operator/internal/artifact"
 )
 
-// ModelArtifactReconciler reconciles a ModelArtifact object.
+// ArtifactReconciler reconciles an Artifact object.
 // It ensures that the underlying PVC and Job resources match the desired state
-// defined in the ModelArtifact CR.
+// defined in the Artifact CR.
 //
 // The controller is intentionally kept thin: it orchestrates the reconciliation flow,
 // while the actual resource construction and status derivation logic reside in
 // internal/artifact/.
-type ModelArtifactReconciler struct {
+type ArtifactReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Version  string
@@ -55,9 +55,9 @@ type ModelArtifactReconciler struct {
 }
 
 // RBAC Permissions required by the controller:
-// +kubebuilder:rbac:groups=model.otterscale.io,resources=modelartifacts,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=model.otterscale.io,resources=modelartifacts/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=model.otterscale.io,resources=modelartifacts/finalizers,verbs=update
+// +kubebuilder:rbac:groups=model.otterscale.io,resources=artifacts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=model.otterscale.io,resources=artifacts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=model.otterscale.io,resources=artifacts/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list
@@ -68,37 +68,33 @@ type ModelArtifactReconciler struct {
 // It implements level-triggered reconciliation: Fetch -> Reconcile Resources -> Status Update.
 //
 // Deletion is handled entirely by Kubernetes garbage collection: all child resources
-// are created with OwnerReferences pointing to the ModelArtifact, so they are automatically
-// cascade-deleted when the ModelArtifact is removed. No finalizer is needed.
-func (r *ModelArtifactReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+// are created with OwnerReferences pointing to the Artifact, so they are automatically
+// cascade-deleted when the Artifact is removed. No finalizer is needed.
+func (r *ArtifactReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithName(req.Name)
 	ctx = log.IntoContext(ctx, logger)
 
-	// 1. Fetch the ModelArtifact instance
-	var ma modelv1alpha1.ModelArtifact
+	var ma modelv1alpha1.Artifact
 	if err := r.Get(ctx, req.NamespacedName, &ma); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// 2. Reconcile all domain resources
 	if err := r.reconcileResources(ctx, &ma); err != nil {
 		return r.handleReconcileError(ctx, &ma, err)
 	}
 
-	// 3. Update Status
 	obs, err := r.updateStatus(ctx, &ma)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// 4. Cleanup workspace PVC when pipeline reaches terminal state
 	if obs.Phase == modelv1alpha1.PhaseSucceeded || obs.Phase == modelv1alpha1.PhaseFailed {
 		if deleteErr := artifact.DeletePVC(ctx, r.Client, &ma); deleteErr != nil {
 			logger.Error(deleteErr, "Failed to delete workspace PVC after completion")
 		}
 	}
 
-	// 5. Requeue to poll for digest when Job succeeded but digest not yet available from pod termination message
+	// Requeue to poll for digest when Job succeeded but digest not yet available from pod termination message
 	if obs.Phase == modelv1alpha1.PhaseSucceeded && obs.Digest == "" {
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
@@ -107,7 +103,7 @@ func (r *ModelArtifactReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 // reconcileResources orchestrates the domain-level resource sync in order.
-func (r *ModelArtifactReconciler) reconcileResources(ctx context.Context, ma *modelv1alpha1.ModelArtifact) error {
+func (r *ArtifactReconciler) reconcileResources(ctx context.Context, ma *modelv1alpha1.Artifact) error {
 	// Idempotent: skip if already in terminal state and no spec change
 	if (ma.Status.Phase == modelv1alpha1.PhaseSucceeded || ma.Status.Phase == modelv1alpha1.PhaseFailed) &&
 		ma.Status.ObservedGeneration == ma.Generation {
@@ -149,7 +145,7 @@ func (r *ModelArtifactReconciler) reconcileResources(ctx context.Context, ma *mo
 
 // handleReconcileError categorizes errors and updates status accordingly.
 // Transient errors are returned to the controller-runtime for exponential backoff retry.
-func (r *ModelArtifactReconciler) handleReconcileError(ctx context.Context, ma *modelv1alpha1.ModelArtifact, err error) (ctrl.Result, error) {
+func (r *ArtifactReconciler) handleReconcileError(ctx context.Context, ma *modelv1alpha1.Artifact, err error) (ctrl.Result, error) {
 	r.setReadyConditionFalse(ctx, ma, "ReconcileError", err.Error())
 	r.Recorder.Eventf(ma, nil, corev1.EventTypeWarning, "ReconcileError", "Reconcile", err.Error())
 	return ctrl.Result{}, err
@@ -157,7 +153,7 @@ func (r *ModelArtifactReconciler) handleReconcileError(ctx context.Context, ma *
 
 // setReadyConditionFalse updates the Ready condition to False via status patch.
 // Errors are logged rather than propagated to avoid masking the original reconcile error.
-func (r *ModelArtifactReconciler) setReadyConditionFalse(ctx context.Context, ma *modelv1alpha1.ModelArtifact, reason, message string) {
+func (r *ArtifactReconciler) setReadyConditionFalse(ctx context.Context, ma *modelv1alpha1.Artifact, reason, message string) {
 	logger := log.FromContext(ctx)
 
 	patch := client.MergeFrom(ma.DeepCopy())
@@ -176,7 +172,7 @@ func (r *ModelArtifactReconciler) setReadyConditionFalse(ctx context.Context, ma
 }
 
 // listJobPods returns Pods owned by the given Job.
-func (r *ModelArtifactReconciler) listJobPods(ctx context.Context, job *batchv1.Job) ([]corev1.Pod, error) {
+func (r *ArtifactReconciler) listJobPods(ctx context.Context, job *batchv1.Job) ([]corev1.Pod, error) {
 	if job == nil {
 		return nil, nil
 	}
@@ -193,7 +189,7 @@ func (r *ModelArtifactReconciler) listJobPods(ctx context.Context, job *batchv1.
 
 // updateStatus calculates the status based on the current observed state and patches the resource.
 // It returns the ObservationResult for the caller to decide on post-status actions (e.g. PVC cleanup).
-func (r *ModelArtifactReconciler) updateStatus(ctx context.Context, ma *modelv1alpha1.ModelArtifact) (artifact.ObservationResult, error) {
+func (r *ArtifactReconciler) updateStatus(ctx context.Context, ma *modelv1alpha1.Artifact) (artifact.ObservationResult, error) {
 	labels := artifact.LabelsForArtifact(ma.Name, r.Version)
 	job, err := artifact.FindOwnedJob(ctx, r.Client, ma.Namespace, labels, ma)
 	if err != nil {
@@ -250,11 +246,11 @@ func (r *ModelArtifactReconciler) updateStatus(ctx context.Context, ma *modelv1a
 		return obs, err
 	}
 
-	log.FromContext(ctx).Info("ModelArtifact status updated", "phase", obs.Phase, "digest", obs.Digest)
+	log.FromContext(ctx).Info("Artifact status updated", "phase", obs.Phase, "digest", obs.Digest)
 
 	if obs.Phase == modelv1alpha1.PhaseSucceeded || obs.Phase == modelv1alpha1.PhaseFailed {
 		r.Recorder.Eventf(ma, nil, corev1.EventTypeNormal, "Reconciled", "Reconcile",
-			"ModelArtifact pipeline completed with phase %s", obs.Phase)
+			"Artifact pipeline completed with phase %s", obs.Phase)
 	}
 
 	return obs, nil
@@ -263,14 +259,14 @@ func (r *ModelArtifactReconciler) updateStatus(ctx context.Context, ma *modelv1a
 // SetupWithManager registers the controller with the Manager and defines watches.
 //
 // Watch configuration:
-//   - ModelArtifact: with GenerationChangedPredicate to skip status-only updates
+//   - Artifact: with GenerationChangedPredicate to skip status-only updates
 //   - Owned Jobs: status changes automatically trigger re-reconciliation via OwnerReference mapping
-func (r *ModelArtifactReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ArtifactReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&modelv1alpha1.ModelArtifact{},
+		For(&modelv1alpha1.Artifact{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Owns(&batchv1.Job{}).
-		Named("modelartifact").
+		Named("artifact").
 		Complete(r)
 }

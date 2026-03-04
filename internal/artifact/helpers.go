@@ -34,7 +34,7 @@ const (
 	// WorkspaceMountPath is the mount path for the workspace volume inside the Job Pod.
 	WorkspaceMountPath = "/workspace"
 
-	// PVCSuffix is appended to the ModelArtifact name to form the PVC name.
+	// PVCSuffix is appended to the Artifact name to form the PVC name.
 	PVCSuffix = "-workspace"
 
 	// DefaultJobTTLSeconds is the time after Job completion (succeeded or failed)
@@ -44,12 +44,12 @@ const (
 )
 
 // LabelsForArtifact returns the standard set of labels for resources managed
-// by a ModelArtifact (Jobs, PVCs). It builds on the shared labels.Standard() base.
+// by an Artifact (Jobs, PVCs). It builds on the shared labels.Standard() base.
 func LabelsForArtifact(artifactName, version string) map[string]string {
 	return labels.Standard(artifactName, ComponentArtifact, version)
 }
 
-// PVCName returns the deterministic PVC name for a given ModelArtifact.
+// PVCName returns the deterministic PVC name for a given Artifact.
 func PVCName(artifactName string) string {
 	return artifactName + PVCSuffix
 }
