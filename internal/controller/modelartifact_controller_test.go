@@ -35,8 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
-	"github.com/otterscale/model-operator/internal/artifact"
 	"github.com/otterscale/model-operator/internal/labels"
+	"github.com/otterscale/model-operator/internal/modelartifact"
 )
 
 var _ = Describe("Artifact Controller", func() {
@@ -47,18 +47,18 @@ var _ = Describe("Artifact Controller", func() {
 
 	var (
 		ctx          context.Context
-		reconciler   *ArtifactReconciler
-		ma           *modelv1alpha1.Artifact
+		reconciler   *ModelArtifactReconciler
+		ma           *modelv1alpha1.ModelArtifact
 		resourceName string
 		namespace    *corev1.Namespace
 	)
 
 	// --- Helpers ---
 
-	makeArtifact := func(name, ns string, mods ...func(*modelv1alpha1.Artifact)) *modelv1alpha1.Artifact {
-		a := &modelv1alpha1.Artifact{
+	makeArtifact := func(name, ns string, mods ...func(*modelv1alpha1.ModelArtifact)) *modelv1alpha1.ModelArtifact {
+		a := &modelv1alpha1.ModelArtifact{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-			Spec: modelv1alpha1.ArtifactSpec{
+			Spec: modelv1alpha1.ModelArtifactSpec{
 				Source: modelv1alpha1.ModelSource{
 					HuggingFace: &modelv1alpha1.HuggingFaceSource{
 						Model: "microsoft/phi-4",
@@ -107,7 +107,7 @@ var _ = Describe("Artifact Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
-		reconciler = &ArtifactReconciler{
+		reconciler = &ModelArtifactReconciler{
 			Client:   k8sClient,
 			Scheme:   k8sClient.Scheme(),
 			Version:  "test",
@@ -139,7 +139,7 @@ var _ = Describe("Artifact Controller", func() {
 
 			By("Verifying the PVC is created")
 			var pvc corev1.PersistentVolumeClaim
-			fetchResource(&pvc, artifact.PVCName(resourceName), namespace.Name)
+			fetchResource(&pvc, modelartifact.PVCName(resourceName), namespace.Name)
 			Expect(pvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("50Gi")))
 			Expect(pvc.Spec.AccessModes).To(ContainElement(corev1.ReadWriteOnce))
 			Expect(pvc.Labels).To(HaveKeyWithValue(labels.ManagedBy, labels.Operator))
@@ -149,7 +149,7 @@ var _ = Describe("Artifact Controller", func() {
 			var jobList batchv1.JobList
 			Expect(k8sClient.List(ctx, &jobList,
 				client.InNamespace(namespace.Name),
-				client.MatchingLabels(artifact.SelectorLabelsForArtifact(resourceName)),
+				client.MatchingLabels(modelartifact.SelectorLabelsForArtifact(resourceName)),
 			)).To(Succeed())
 			Expect(jobList.Items).To(HaveLen(1))
 			job := jobList.Items[0]
@@ -160,8 +160,8 @@ var _ = Describe("Artifact Controller", func() {
 			Expect(container.TerminationMessagePath).To(Equal("/dev/termination-log"))
 			Expect(container.VolumeMounts).To(ContainElement(
 				corev1.VolumeMount{
-					Name:      artifact.WorkspaceVolumeName,
-					MountPath: artifact.WorkspaceMountPath,
+					Name:      modelartifact.WorkspaceVolumeName,
+					MountPath: modelartifact.WorkspaceMountPath,
 				},
 			))
 
@@ -186,7 +186,7 @@ var _ = Describe("Artifact Controller", func() {
 			var jobList batchv1.JobList
 			Expect(k8sClient.List(ctx, &jobList,
 				client.InNamespace(namespace.Name),
-				client.MatchingLabels(artifact.SelectorLabelsForArtifact(resourceName)),
+				client.MatchingLabels(modelartifact.SelectorLabelsForArtifact(resourceName)),
 			)).To(Succeed())
 			Expect(jobList.Items).To(HaveLen(1))
 		})
@@ -210,7 +210,7 @@ var _ = Describe("Artifact Controller", func() {
 
 	Context("Domain Helpers", func() {
 		It("should generate correct labels", func() {
-			artifactLabels := artifact.LabelsForArtifact("my-model", "v1")
+			artifactLabels := modelartifact.LabelsForArtifact("my-model", "v1")
 			Expect(artifactLabels).To(HaveKeyWithValue(labels.Name, "my-model"))
 			Expect(artifactLabels).To(HaveKeyWithValue(labels.Version, "v1"))
 			Expect(artifactLabels).To(HaveKeyWithValue(labels.Component, "model-artifact"))
@@ -233,7 +233,7 @@ var _ = Describe("Artifact Controller", func() {
 			var jobList batchv1.JobList
 			Expect(k8sClient.List(ctx, &jobList,
 				client.InNamespace(namespace.Name),
-				client.MatchingLabels(artifact.SelectorLabelsForArtifact(resourceName)),
+				client.MatchingLabels(modelartifact.SelectorLabelsForArtifact(resourceName)),
 			)).To(Succeed())
 			for i := range jobList.Items {
 				Expect(k8sClient.Delete(ctx, &jobList.Items[i])).To(Succeed())
@@ -250,7 +250,7 @@ var _ = Describe("Artifact Controller", func() {
 				var jobs batchv1.JobList
 				Expect(k8sClient.List(ctx, &jobs,
 					client.InNamespace(namespace.Name),
-					client.MatchingLabels(artifact.SelectorLabelsForArtifact(resourceName)),
+					client.MatchingLabels(modelartifact.SelectorLabelsForArtifact(resourceName)),
 				)).To(Succeed())
 				// Count only Jobs not marked for deletion
 				var active int

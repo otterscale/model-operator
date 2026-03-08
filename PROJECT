@@ -15,7 +15,15 @@ resources:
   domain: otterscale.io
   external: true
   group: model
-  kind: Artifact
+  kind: ModelArtifact
+  module: github.com/otterscale/api
+  path: github.com/otterscale/api/model/v1alpha1
+  version: v1alpha1
+- controller: true
+  domain: otterscale.io
+  external: true
+  group: model
+  kind: ModelService
   module: github.com/otterscale/api
   path: github.com/otterscale/api/model/v1alpha1
   version: v1alpha1

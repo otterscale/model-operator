@@ -25,6 +25,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	istionetworkingv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -33,10 +35,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	inferenceextv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 
 	"github.com/otterscale/model-operator/internal/controller"
+	"github.com/otterscale/model-operator/internal/modelservice"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -48,8 +53,11 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
 	utilruntime.Must(modelv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(inferenceextv1.Install(scheme))
+	utilruntime.Must(istionetworkingv1beta1.AddToScheme(scheme))
+	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -61,7 +69,13 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var kitImage string
+	var provider string
 	var enableHTTP2 bool
+	var metricsEndpointAuth bool
+	var tracingEnabled bool
+	var tracingOtelEndpoint string
+	var tracingSampler string
+	var tracingSamplerArg string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -79,6 +93,18 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&kitImage, "kit-image", "ghcr.io/kitops-ml/kitops:v1.11.0",
 		"Container image containing the kit CLI for import/pack/push jobs.")
+	flag.StringVar(&provider, "provider", "istio",
+		"Infrastructure provider for EPP networking: istio, gke, none.")
+	flag.BoolVar(&metricsEndpointAuth, "metrics-endpoint-auth", true,
+		"Whether the EPP metrics endpoint requires authentication.")
+	flag.BoolVar(&tracingEnabled, "tracing-enabled", false,
+		"Enable OpenTelemetry tracing for EPP containers.")
+	flag.StringVar(&tracingOtelEndpoint, "tracing-otel-endpoint", "",
+		"OTLP exporter endpoint for EPP tracing (e.g. http://otel-collector:4317).")
+	flag.StringVar(&tracingSampler, "tracing-sampler", "parentbased_traceidratio",
+		"OpenTelemetry traces sampler for EPP.")
+	flag.StringVar(&tracingSamplerArg, "tracing-sampler-arg", "0.01",
+		"Argument passed to the OpenTelemetry traces sampler.")
 	opts := zap.Options{
 		Development: false,
 	}
@@ -162,14 +188,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.ArtifactReconciler{
+	if err := (&controller.ModelArtifactReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Version:  version,
 		KitImage: kitImage,
 		Recorder: mgr.GetEventRecorder("artifact-controller"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "Artifact")
+		setupLog.Error(err, "Failed to create controller", "controller", "ModelArtifact")
+		os.Exit(1)
+	}
+	if err := (&controller.ModelServiceReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Version:  version,
+		Recorder: mgr.GetEventRecorder("modelservice-controller"),
+		EPPConfig: modelservice.EPPConfig{
+			Provider:            provider,
+			MetricsEndpointAuth: metricsEndpointAuth,
+			Tracing: modelservice.TracingConfig{
+				Enabled:              tracingEnabled,
+				OtelExporterEndpoint: tracingOtelEndpoint,
+				Sampler:              tracingSampler,
+				SamplerArg:           tracingSamplerArg,
+			},
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "ModelService")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

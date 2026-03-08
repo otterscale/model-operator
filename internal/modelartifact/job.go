@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package artifact
+package modelartifact
 
 import (
 	"fmt"
@@ -64,7 +64,7 @@ echo -n "$digest" > /dev/termination-log
 // BuildPVC constructs a PersistentVolumeClaim for the import/pack/push workspace.
 // The PVC name is deterministic (<artifact-name>-workspace) since there is a 1:1
 // relationship between an Artifact and its workspace PVC.
-func BuildPVC(artifact *modelv1alpha1.Artifact, labels map[string]string) *corev1.PersistentVolumeClaim {
+func BuildPVC(artifact *modelv1alpha1.ModelArtifact, labels map[string]string) *corev1.PersistentVolumeClaim {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PVCName(artifact.Name),
@@ -95,7 +95,7 @@ func BuildPVC(artifact *modelv1alpha1.Artifact, labels map[string]string) *corev
 //   - backoffLimit=0 prevents the Job from retrying on its own; the controller handles retries
 //   - terminationMessagePath writes the OCI digest for the controller to read
 //   - Secrets are injected via env valueFrom, never passing through the controller
-func BuildJob(artifact *modelv1alpha1.Artifact, kitImage string, labels map[string]string) *batchv1.Job {
+func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map[string]string) *batchv1.Job {
 	env := buildEnvVars(artifact)
 
 	job := &batchv1.Job{
@@ -168,7 +168,7 @@ func BuildJob(artifact *modelv1alpha1.Artifact, kitImage string, labels map[stri
 }
 
 // OCIReference returns the full OCI target reference for kit pack/push.
-func OCIReference(artifact *modelv1alpha1.Artifact) string {
+func OCIReference(artifact *modelv1alpha1.ModelArtifact) string {
 	tag := artifact.Spec.Target.Tag
 	if tag == "" {
 		tag = "latest"
@@ -176,7 +176,7 @@ func OCIReference(artifact *modelv1alpha1.Artifact) string {
 	return fmt.Sprintf("%s/%s:%s", artifact.Spec.Target.Registry, artifact.Spec.Target.Repository, tag)
 }
 
-func buildEnvVars(artifact *modelv1alpha1.Artifact) []corev1.EnvVar {
+func buildEnvVars(artifact *modelv1alpha1.ModelArtifact) []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "OCI_TARGET", Value: OCIReference(artifact)},
 		{Name: "FORMAT", Value: string(artifact.Spec.Format)},

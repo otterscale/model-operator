@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package artifact_test
+package modelartifact_test
 
 import (
 	"testing"
@@ -25,5 +25,5 @@ import (
 
 func TestArtifact(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Artifact Suite")
+	RunSpecs(t, "ModelArtifact Suite")
 }

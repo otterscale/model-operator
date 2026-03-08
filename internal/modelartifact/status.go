@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package artifact
+package modelartifact
 
 import (
 	"strings"
@@ -28,7 +28,7 @@ import (
 
 // ObservationResult encapsulates the observed state derived from a Job and its Pods.
 type ObservationResult struct {
-	Phase   modelv1alpha1.ArtifactPhase
+	Phase   modelv1alpha1.ModelArtifactPhase
 	Ready   metav1.ConditionStatus
 	Reason  string
 	Message string
@@ -44,7 +44,7 @@ type ObservationResult struct {
 //
 // This is a pure function with no side effects — all observation logic is
 // testable without a running cluster.
-func ObserveJobStatus(job *batchv1.Job, pods []corev1.Pod, fallbackPhase modelv1alpha1.ArtifactPhase, fallbackDigest string) ObservationResult {
+func ObserveJobStatus(job *batchv1.Job, pods []corev1.Pod, fallbackPhase modelv1alpha1.ModelArtifactPhase, fallbackDigest string) ObservationResult {
 	if job == nil {
 		if fallbackPhase == modelv1alpha1.PhaseSucceeded || fallbackPhase == modelv1alpha1.PhaseFailed {
 			ready := metav1.ConditionFalse
@@ -74,7 +74,7 @@ func ObserveJobStatus(job *batchv1.Job, pods []corev1.Pod, fallbackPhase modelv1
 			Phase:   modelv1alpha1.PhaseSucceeded,
 			Ready:   metav1.ConditionTrue,
 			Reason:  "Succeeded",
-			Message: "Artifact pushed successfully",
+			Message: "Model artifact pushed successfully",
 			Digest:  digest,
 		}
 

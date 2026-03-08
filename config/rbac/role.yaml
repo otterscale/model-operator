@@ -7,6 +7,20 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - persistentvolumeclaims
   verbs:
   - create
@@ -22,11 +36,16 @@ rules:
   - get
   - list
 - apiGroups:
-  - ""
+  - apps
   resources:
-  - secrets
+  - deployments
   verbs:
+  - create
+  - delete
   - get
+  - list
+  - update
+  - watch
 - apiGroups:
   - batch
   resources:
@@ -45,9 +64,31 @@ rules:
   - create
   - patch
 - apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - inference.networking.k8s.io
+  resources:
+  - inferencepools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - model.otterscale.io
   resources:
-  - artifacts
+  - modelartifacts
   verbs:
   - get
   - list
@@ -55,8 +96,62 @@ rules:
 - apiGroups:
   - model.otterscale.io
   resources:
-  - artifacts/status
+  - modelartifacts/status
+  - modelservices/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - model.otterscale.io
+  resources:
+  - modelservices
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - model.otterscale.io
+  resources:
+  - modelservices/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - podmonitors
+  - servicemonitors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - destinationrules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
