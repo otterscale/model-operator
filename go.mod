@@ -8,12 +8,11 @@ require (
 	github.com/onsi/gomega v1.39.1
 	github.com/otterscale/api v0.8.19
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.89.0
-	istio.io/api v1.29.0-rc.1.0.20260209142455-7fea5efd57ca
+	istio.io/api v1.29.0
 	istio.io/client-go v1.29.0
 	k8s.io/api v0.35.2
 	k8s.io/apimachinery v0.35.2
 	k8s.io/client-go v0.35.2
-	k8s.io/utils v0.0.0-20251219084037-98d557b7f1e7
 	sigs.k8s.io/controller-runtime v0.23.1
 	sigs.k8s.io/gateway-api v1.4.1
 	sigs.k8s.io/gateway-api-inference-extension v1.3.1
@@ -107,6 +106,7 @@ require (
 	k8s.io/component-base v0.35.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
+	k8s.io/utils v0.0.0-20251219084037-98d557b7f1e7 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
