@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package artifact
+package modelartifact
 
 import (
 	"context"
@@ -35,7 +35,7 @@ import (
 
 // EnsurePVC creates the workspace PVC if it does not exist.
 // Caller must pass a client and scheme for OwnerReference.
-func EnsurePVC(ctx context.Context, c client.Client, scheme *runtime.Scheme, ma *modelv1alpha1.Artifact, labels map[string]string) error {
+func EnsurePVC(ctx context.Context, c client.Client, scheme *runtime.Scheme, ma *modelv1alpha1.ModelArtifact, labels map[string]string) error {
 	pvcName := PVCName(ma.Name)
 	var existing corev1.PersistentVolumeClaim
 	err := c.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: ma.Namespace}, &existing)
@@ -64,7 +64,7 @@ func EnsurePVC(ctx context.Context, c client.Client, scheme *runtime.Scheme, ma 
 // selectorLabels is used for the lookup query (version-independent);
 // metadataLabels is applied to newly created Jobs (includes version).
 // Returns the job (existing or newly created), whether it was created, and any error.
-func EnsureJob(ctx context.Context, c client.Client, scheme *runtime.Scheme, ma *modelv1alpha1.Artifact, kitImage string, selectorLabels, metadataLabels map[string]string) (*batchv1.Job, bool, error) {
+func EnsureJob(ctx context.Context, c client.Client, scheme *runtime.Scheme, ma *modelv1alpha1.ModelArtifact, kitImage string, selectorLabels, metadataLabels map[string]string) (*batchv1.Job, bool, error) {
 	job, err := FindOwnedJob(ctx, c, ma.Namespace, selectorLabels, ma)
 	if err != nil {
 		return nil, false, err
@@ -101,7 +101,7 @@ func FindOwnedJob(ctx context.Context, c client.Client, namespace string, labels
 
 // CleanupStaleJobs deletes all owned Jobs that are not yet marked for deletion.
 // Called when generation changes to remove Jobs from the previous generation.
-func CleanupStaleJobs(ctx context.Context, c client.Client, ma *modelv1alpha1.Artifact, labels map[string]string) error {
+func CleanupStaleJobs(ctx context.Context, c client.Client, ma *modelv1alpha1.ModelArtifact, labels map[string]string) error {
 	var jobList batchv1.JobList
 	if err := c.List(ctx, &jobList, client.InNamespace(ma.Namespace), client.MatchingLabels(labels)); err != nil {
 		return err
@@ -123,7 +123,7 @@ func CleanupStaleJobs(ctx context.Context, c client.Client, ma *modelv1alpha1.Ar
 }
 
 // DeletePVC removes the workspace PVC. Non-existence is ignored.
-func DeletePVC(ctx context.Context, c client.Client, ma *modelv1alpha1.Artifact) error {
+func DeletePVC(ctx context.Context, c client.Client, ma *modelv1alpha1.ModelArtifact) error {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PVCName(ma.Name),

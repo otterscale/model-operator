@@ -188,14 +188,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.ArtifactReconciler{
+	if err := (&controller.ModelArtifactReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Version:  version,
 		KitImage: kitImage,
 		Recorder: mgr.GetEventRecorder("artifact-controller"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "Artifact")
+		setupLog.Error(err, "Failed to create controller", "controller", "ModelArtifact")
 		os.Exit(1)
 	}
 	if err := (&controller.ModelServiceReconciler{
