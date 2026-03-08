@@ -1,0 +1,55 @@
+apiVersion: model.otterscale.io/v1alpha1
+kind: ModelService
+metadata:
+  name: qwen3-32b
+  namespace: ml-serving
+spec:
+  model:
+    name: qwen/Qwen3-32B
+    image: registry.example.com/models/qwen3-32b:v1
+    imagePullSecrets:
+      - name: registry-creds
+
+  engine:
+    image: vllm/vllm-openai:v0.8.0
+    args:
+      - --max-model-len=8192
+      - --enable-chunked-prefill
+
+  accelerator:
+    type: nvidia
+
+  decode:
+    replicas: 2
+    parallelism:
+      tensor: 4
+    resources:
+      requests:
+        cpu: "8"
+        memory: 64Gi
+
+  prefill:
+    replicas: 1
+    parallelism:
+      tensor: 4
+    resources:
+      requests:
+        cpu: "8"
+        memory: 64Gi
+
+  routingProxy:
+    connector: nixlv2
+
+  inferencePool:
+    endpointPicker:
+      port: 9002
+
+  httpRoute:
+    gatewayRef:
+      name: inference-gateway
+    hostnames:
+      - models.example.com
+
+  monitoring:
+    podMonitor:
+      enabled: true

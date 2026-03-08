@@ -28,6 +28,17 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - batch
   resources:
   - jobs
@@ -45,9 +56,32 @@ rules:
   - create
   - patch
 - apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - inference.networking.k8s.io
+  resources:
+  - inferencepools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - model.otterscale.io
   resources:
   - artifacts
+  - modelservices
   verbs:
   - get
   - list
@@ -56,7 +90,19 @@ rules:
   - model.otterscale.io
   resources:
   - artifacts/status
+  - modelservices/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - podmonitors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
