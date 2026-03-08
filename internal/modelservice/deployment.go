@@ -41,11 +41,13 @@ func BuildDeployment(
 	podLabels map[string]string,
 	metadataLabels map[string]string,
 	selectorLabels map[string]string,
+	tracing TracingConfig,
 ) *appsv1.Deployment {
 	replicas := DefaultReplicas(role.Replicas)
 
-	vllmContainer := buildVLLMContainer(ms, role)
-	initContainers := buildInitContainers(ms)
+	isDecodeRole := roleName == RoleDecode
+	vllmContainer := buildVLLMContainer(ms, role, isDecodeRole)
+	initContainers := buildInitContainers(ms, isDecodeRole, tracing)
 	volumes := buildVolumes(ms)
 
 	dep := &appsv1.Deployment{
@@ -86,13 +88,16 @@ func BuildDeployment(
 }
 
 // buildVLLMContainer constructs the main vLLM inference engine container.
+// The routing proxy is only used for decode pods; prefill pods listen directly
+// on the engine port.
 func buildVLLMContainer(
 	ms *modelv1alpha1.ModelService,
 	role *modelv1alpha1.RoleSpec,
+	isDecodeRole bool,
 ) corev1.Container {
 	port := enginePort(ms)
 	vllmPort := port
-	if ms.Spec.RoutingProxy != nil {
+	if isDecodeRole && ms.Spec.RoutingProxy != nil {
 		vllmPort = routingProxyTargetPort(ms)
 	}
 
@@ -197,11 +202,11 @@ func buildVLLMEnv(
 	return envs
 }
 
-// buildInitContainers constructs init containers. When a routing proxy is configured,
-// it runs as a native sidecar (restartable init container) that proxies traffic
-// between the external port and vLLM.
-func buildInitContainers(ms *modelv1alpha1.ModelService) []corev1.Container {
-	if ms.Spec.RoutingProxy == nil {
+// buildInitContainers constructs init containers. The routing proxy sidecar is
+// only injected for decode pods — prefill pods receive requests directly from
+// the routing proxy running on decode pods, so they don't need their own proxy.
+func buildInitContainers(ms *modelv1alpha1.ModelService, isDecodeRole bool, tracing TracingConfig) []corev1.Container {
+	if !isDecodeRole || ms.Spec.RoutingProxy == nil {
 		return nil
 	}
 
@@ -231,11 +236,27 @@ func buildInitContainers(ms *modelv1alpha1.ModelService) []corev1.Container {
 		args = append(args, "--cert-path", proxy.CertPath)
 	}
 
+	var env []corev1.EnvVar
+	if tracing.Enabled {
+		env = append(env,
+			corev1.EnvVar{Name: "OTEL_SERVICE_NAME", Value: "llm-d-routing-sidecar"},
+			corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: tracing.OtelExporterEndpoint},
+			corev1.EnvVar{Name: "OTEL_TRACES_EXPORTER", Value: "otlp"},
+		)
+		if tracing.Sampler != "" {
+			env = append(env, corev1.EnvVar{Name: "OTEL_TRACES_SAMPLER", Value: tracing.Sampler})
+		}
+		if tracing.SamplerArg != "" {
+			env = append(env, corev1.EnvVar{Name: "OTEL_TRACES_SAMPLER_ARG", Value: tracing.SamplerArg})
+		}
+	}
+
 	return []corev1.Container{
 		{
 			Name:  "routing-proxy",
 			Image: proxy.Image,
 			Args:  args,
+			Env:   env,
 			Ports: []corev1.ContainerPort{
 				{
 					Name:          "proxy",

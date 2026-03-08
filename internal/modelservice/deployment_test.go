@@ -65,7 +65,7 @@ func TestBuildDeployment_Basic(t *testing.T) {
 	metaLabels := map[string]string{"app": "qwen3"}
 	selLabels := map[string]string{"app": "qwen3"}
 
-	dep := BuildDeployment(ms, role, RoleDecode, "qwen3-32b-decode", podLabels, metaLabels, selLabels)
+	dep := BuildDeployment(ms, role, RoleDecode, "qwen3-32b-decode", podLabels, metaLabels, selLabels, TracingConfig{})
 
 	if dep.Name != "qwen3-32b-decode" {
 		t.Errorf("Name = %q", dep.Name)
@@ -109,7 +109,7 @@ func TestBuildDeployment_Basic(t *testing.T) {
 func TestBuildDeployment_ImageVolume(t *testing.T) {
 	ms := newTestModelService()
 	role := &ms.Spec.Decode
-	dep := BuildDeployment(ms, role, RoleDecode, "test-decode", nil, nil, nil)
+	dep := BuildDeployment(ms, role, RoleDecode, "test-decode", nil, nil, nil, TracingConfig{})
 
 	volumes := dep.Spec.Template.Spec.Volumes
 	if len(volumes) != 1 {
@@ -149,7 +149,7 @@ func TestBuildDeployment_WithRoutingProxy(t *testing.T) {
 		TargetPort: 8200,
 	}
 	role := &ms.Spec.Decode
-	dep := BuildDeployment(ms, role, RoleDecode, "test-decode", nil, nil, nil)
+	dep := BuildDeployment(ms, role, RoleDecode, "test-decode", nil, nil, nil, TracingConfig{})
 
 	initContainers := dep.Spec.Template.Spec.InitContainers
 	if len(initContainers) != 1 {
@@ -180,10 +180,32 @@ func TestBuildDeployment_WithRoutingProxy(t *testing.T) {
 	}
 }
 
+func TestBuildDeployment_PrefillNoRoutingProxy(t *testing.T) {
+	ms := newTestModelService()
+	ms.Spec.RoutingProxy = &modelv1alpha1.RoutingProxySpec{
+		Connector:  "nixlv2",
+		TargetPort: 8200,
+	}
+	role := &ms.Spec.Decode
+	dep := BuildDeployment(ms, role, RolePrefill, "test-prefill", nil, nil, nil, TracingConfig{})
+
+	initContainers := dep.Spec.Template.Spec.InitContainers
+	if len(initContainers) != 0 {
+		t.Fatalf("Prefill should have 0 init containers, got %d", len(initContainers))
+	}
+
+	vllm := dep.Spec.Template.Spec.Containers[0]
+	for _, p := range vllm.Ports {
+		if p.ContainerPort == 8200 {
+			t.Error("Prefill vLLM should listen on engine port, not routing proxy target port")
+		}
+	}
+}
+
 func TestBuildDeployment_SecurityContext(t *testing.T) {
 	ms := newTestModelService()
 	role := &ms.Spec.Decode
-	dep := BuildDeployment(ms, role, RoleDecode, "test", nil, nil, nil)
+	dep := BuildDeployment(ms, role, RoleDecode, "test", nil, nil, nil, TracingConfig{})
 
 	podSec := dep.Spec.Template.Spec.SecurityContext
 	if podSec == nil {
@@ -206,7 +228,7 @@ func TestBuildDeployment_CPUAccelerator(t *testing.T) {
 	ms := newTestModelService()
 	ms.Spec.Accelerator.Type = modelv1alpha1.AcceleratorCPU
 	role := &ms.Spec.Decode
-	dep := BuildDeployment(ms, role, RoleDecode, "test", nil, nil, nil)
+	dep := BuildDeployment(ms, role, RoleDecode, "test", nil, nil, nil, TracingConfig{})
 
 	vllm := dep.Spec.Template.Spec.Containers[0]
 	for k := range vllm.Resources.Limits {

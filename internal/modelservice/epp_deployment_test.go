@@ -24,7 +24,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
@@ -40,7 +39,7 @@ func newEPPTestModelService() *modelv1alpha1.ModelService {
 			InferencePool: &modelv1alpha1.InferencePoolSpec{
 				EndpointPicker: modelv1alpha1.EndpointPickerSpec{
 					Image:    "ghcr.io/llm-d/llm-d-inference-scheduler:v0.6.0",
-					Replicas: ptr.To(int32(2)),
+					Replicas: new(int32(2)),
 					Port:     9002,
 				},
 			},
@@ -148,7 +147,7 @@ func TestBuildEPPDeployment_GRPCProbes(t *testing.T) {
 
 func TestBuildEPPDeployment_GRPCProbeService_HA(t *testing.T) {
 	ms := newEPPTestModelService()
-	ms.Spec.InferencePool.EndpointPicker.Replicas = ptr.To(int32(3))
+	ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(3))
 	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 	c := dep.Spec.Template.Spec.Containers[0]
 
@@ -162,7 +161,7 @@ func TestBuildEPPDeployment_GRPCProbeService_HA(t *testing.T) {
 
 func TestBuildEPPDeployment_GRPCProbeService_Single(t *testing.T) {
 	ms := newEPPTestModelService()
-	ms.Spec.InferencePool.EndpointPicker.Replicas = ptr.To(int32(1))
+	ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(1))
 	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 	c := dep.Spec.Template.Spec.Containers[0]
 
@@ -245,7 +244,7 @@ func TestBuildEPPDeployment_ArgsNonPD(t *testing.T) {
 
 func TestBuildEPPDeployment_ArgsPD(t *testing.T) {
 	ms := newEPPTestModelService()
-	ms.Spec.Prefill = &modelv1alpha1.RoleSpec{Replicas: ptr.To(int32(1))}
+	ms.Spec.Prefill = &modelv1alpha1.RoleSpec{Replicas: new(int32(1))}
 	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "hash")
 
 	args := dep.Spec.Template.Spec.Containers[0].Args
@@ -277,7 +276,7 @@ func TestBuildEPPDeployment_ZapEncoder(t *testing.T) {
 
 func TestBuildEPPDeployment_LeaderElection(t *testing.T) {
 	ms := newEPPTestModelService()
-	ms.Spec.InferencePool.EndpointPicker.Replicas = ptr.To(int32(3))
+	ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(3))
 	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 
 	args := dep.Spec.Template.Spec.Containers[0].Args
@@ -294,7 +293,7 @@ func TestBuildEPPDeployment_LeaderElection(t *testing.T) {
 
 func TestBuildEPPDeployment_NoLeaderElectionSingleReplica(t *testing.T) {
 	ms := newEPPTestModelService()
-	ms.Spec.InferencePool.EndpointPicker.Replicas = ptr.To(int32(1))
+	ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(1))
 	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 
 	args := dep.Spec.Template.Spec.Containers[0].Args

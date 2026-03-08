@@ -35,8 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	inferenceextv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 

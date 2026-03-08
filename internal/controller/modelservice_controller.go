@@ -36,8 +36,8 @@ import (
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	inferenceextv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 	"github.com/otterscale/model-operator/internal/modelservice"
@@ -142,10 +142,10 @@ func (r *ModelServiceReconciler) handleDeletion(ctx context.Context, ms *modelv1
 // and the InferencePool/HTTPRoute reference the EPP Service.
 func (r *ModelServiceReconciler) reconcileResources(ctx context.Context, ms *modelv1alpha1.ModelService) error {
 	// 1. Serving Deployments
-	if err := modelservice.EnsureDecodeDeployment(ctx, r.Client, r.Scheme, ms, r.Version); err != nil {
+	if err := modelservice.EnsureDecodeDeployment(ctx, r.Client, r.Scheme, ms, r.Version, r.EPPConfig.Tracing); err != nil {
 		return err
 	}
-	if err := modelservice.EnsurePrefillDeployment(ctx, r.Client, r.Scheme, ms, r.Version); err != nil {
+	if err := modelservice.EnsurePrefillDeployment(ctx, r.Client, r.Scheme, ms, r.Version, r.EPPConfig.Tracing); err != nil {
 		return err
 	}
 

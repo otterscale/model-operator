@@ -18,13 +18,13 @@ package modelservice
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
@@ -51,7 +51,7 @@ func BuildEPPDeployment(
 	name := EPPName(ms.Name)
 	poolName := InferencePoolName(ms.Name)
 
-	replicas := ptr.To(int32(1))
+	replicas := new(int32(1))
 	if spec.Replicas != nil {
 		replicas = spec.Replicas
 	}
@@ -105,14 +105,21 @@ func BuildEPPDeployment(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName:            name,
-					TerminationGracePeriodSeconds: ptr.To(int64(130)),
+					TerminationGracePeriodSeconds: new(int64(130)),
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: new(true),
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					Containers: []corev1.Container{
 						{
-							Name:      eppContainerName,
-							Image:     spec.Image,
-							Args:      args,
-							Env:       env,
-							Resources: resources,
+							Name:            eppContainerName,
+							Image:           spec.Image,
+							ImagePullPolicy: corev1.PullIfNotPresent,
+							Args:            args,
+							Env:             env,
+							Resources:       resources,
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          eppExtProcPortName,
@@ -137,8 +144,14 @@ func BuildEPPDeployment(
 									ReadOnly:  true,
 								},
 							},
-						ReadinessProbe: grpcProbe(eppGRPCHealthPort, readinessService, 5, 2),
-						LivenessProbe:  grpcProbe(eppGRPCHealthPort, livenessService, 5, 10),
+							ReadinessProbe: grpcProbe(eppGRPCHealthPort, readinessService, 0, 2),
+							LivenessProbe:  grpcProbe(eppGRPCHealthPort, livenessService, 5, 10),
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: new(false),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 						},
 					},
 					Volumes: []corev1.Volume{
@@ -149,7 +162,7 @@ func BuildEPPDeployment(
 									LocalObjectReference: corev1.LocalObjectReference{
 										Name: EPPConfigMapName(ms.Name),
 									},
-									Optional: ptr.To(true),
+									Optional: new(true),
 								},
 							},
 						},
@@ -170,8 +183,8 @@ func buildEPPArgs(
 		fmt.Sprintf("--pool-name=%s", poolName),
 		fmt.Sprintf("--pool-namespace=%s", namespace),
 		fmt.Sprintf("--config-file=%s/%s", eppConfigMountPath, pluginsConfigFile),
-		fmt.Sprintf("--extProcPort=%d", extProcPort),
-		fmt.Sprintf("--metricsPort=%d", eppMetricsPort),
+		fmt.Sprintf("--grpc-port=%d", extProcPort),
+		fmt.Sprintf("--metrics-port=%d", eppMetricsPort),
 		"--zap-encoder=json",
 	}
 
@@ -289,12 +302,10 @@ func defaultEPPResources() corev1.ResourceRequirements {
 	}
 }
 
-func mergeMaps(maps ...map[string]string) map[string]string {
+func mergeMaps(ms ...map[string]string) map[string]string {
 	result := make(map[string]string)
-	for _, m := range maps {
-		for k, v := range m {
-			result[k] = v
-		}
+	for _, m := range ms {
+		maps.Copy(result, m)
 	}
 	return result
 }

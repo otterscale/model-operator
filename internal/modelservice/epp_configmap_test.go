@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
@@ -40,7 +39,7 @@ func TestPluginsConfigFile_NonPD(t *testing.T) {
 func TestPluginsConfigFile_PD(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: ptr.To(int32(1))},
+			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
 		},
 	}
 	if got := PluginsConfigFile(ms); got != PDPluginsConfigFile {
@@ -93,7 +92,7 @@ func TestBuildEPPConfigMap_PD(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: ptr.To(int32(1))},
+			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
 		},
 	}
 
@@ -143,7 +142,7 @@ func TestConfigMapHash_PD(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: ptr.To(int32(1))},
+			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
 		},
 	}
 	hash := ConfigMapHash(ms)
@@ -159,7 +158,7 @@ func TestConfigMapHash_Deterministic(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: ptr.To(int32(1))},
+			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
 		},
 	}
 	h1 := ConfigMapHash(ms)
@@ -176,7 +175,7 @@ func TestConfigMapHash_DiffersBetweenModes(t *testing.T) {
 	msPD := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: ptr.To(int32(1))},
+			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
 		},
 	}
 	if ConfigMapHash(msNonPD) == ConfigMapHash(msPD) {

@@ -7,6 +7,20 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - persistentvolumeclaims
   verbs:
   - create
@@ -21,12 +35,6 @@ rules:
   verbs:
   - get
   - list
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
 - apiGroups:
   - apps
   resources:
@@ -81,7 +89,6 @@ rules:
   - model.otterscale.io
   resources:
   - artifacts
-  - modelservices
   verbs:
   - get
   - list
@@ -96,9 +103,51 @@ rules:
   - patch
   - update
 - apiGroups:
+  - model.otterscale.io
+  resources:
+  - modelservices
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - model.otterscale.io
+  resources:
+  - modelservices/finalizers
+  verbs:
+  - update
+- apiGroups:
   - monitoring.coreos.com
   resources:
   - podmonitors
+  - servicemonitors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - destinationrules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
   verbs:
   - create
   - delete
