@@ -24,6 +24,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -168,7 +169,7 @@ func (r *ModelServiceReconciler) reconcileResources(ctx context.Context, ms *mod
 	}
 
 	// 5. EPP metrics auth
-	if err := modelservice.EnsureEPPSATokenSecret(ctx, r.Client, r.Scheme, ms, r.Version); err != nil {
+	if err := modelservice.EnsureEPPSATokenSecret(ctx, r.Client, r.Scheme, ms, r.EPPConfig, r.Version); err != nil {
 		return err
 	}
 
@@ -199,7 +200,7 @@ func (r *ModelServiceReconciler) reconcileResources(ctx context.Context, ms *mod
 	if err := modelservice.EnsurePodMonitors(ctx, r.Client, r.Scheme, ms, r.Version); err != nil {
 		return err
 	}
-	if err := modelservice.EnsureEPPServiceMonitor(ctx, r.Client, r.Scheme, ms, r.Version); err != nil {
+	if err := modelservice.EnsureEPPServiceMonitor(ctx, r.Client, r.Scheme, ms, r.EPPConfig, r.Version); err != nil {
 		return err
 	}
 
@@ -298,6 +299,10 @@ func (r *ModelServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.ServiceAccount{}).
+		Owns(&corev1.Secret{}).
+		Owns(&rbacv1.Role{}).
+		Owns(&rbacv1.RoleBinding{}).
 		Owns(&inferenceextv1.InferencePool{}).
 		Owns(&gatewayv1.HTTPRoute{}).
 		Named("modelservice").

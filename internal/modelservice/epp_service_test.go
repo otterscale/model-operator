@@ -52,18 +52,18 @@ func TestBuildEPPService(t *testing.T) {
 	hasGRPC := false
 	hasMetrics := false
 	for _, p := range svc.Spec.Ports {
-		if p.Name == "grpc" && p.Port == 9002 {
+		if p.Name == "grpc-ext-proc" && p.Port == 9002 {
 			hasGRPC = true
 		}
-		if p.Name == "metrics" && p.Port == 9090 {
+		if p.Name == "http-metrics" && p.Port == 9090 {
 			hasMetrics = true
 		}
 	}
 	if !hasGRPC {
-		t.Error("Missing grpc port 9002")
+		t.Error("Missing grpc-ext-proc port 9002")
 	}
 	if !hasMetrics {
-		t.Error("Missing metrics port 9090")
+		t.Error("Missing http-metrics port 9090")
 	}
 
 	if svc.Spec.Selector["sel"] != "epp" {
@@ -86,7 +86,7 @@ func TestBuildEPPService_CustomPort(t *testing.T) {
 	svc := BuildEPPService(ms, nil, nil)
 
 	for _, p := range svc.Spec.Ports {
-		if p.Name == "grpc" && p.Port != 9999 {
+		if p.Name == "grpc-ext-proc" && p.Port != 9999 {
 			t.Errorf("gRPC port = %d, want 9999", p.Port)
 		}
 	}

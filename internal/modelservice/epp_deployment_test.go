@@ -107,19 +107,19 @@ func TestBuildEPPDeployment_Container(t *testing.T) {
 	hasHealthPort := false
 	for _, p := range c.Ports {
 		switch {
-		case p.Name == "grpc" && p.ContainerPort == 9002:
+		case p.Name == "grpc-ext-proc" && p.ContainerPort == 9002:
 			hasExtProcPort = true
-		case p.Name == "metrics" && p.ContainerPort == 9090:
+		case p.Name == "http-metrics" && p.ContainerPort == 9090:
 			hasMetricsPort = true
 		case p.Name == "grpc-health" && p.ContainerPort == 9003:
 			hasHealthPort = true
 		}
 	}
 	if !hasExtProcPort {
-		t.Error("Missing grpc port 9002")
+		t.Error("Missing grpc-ext-proc port 9002")
 	}
 	if !hasMetricsPort {
-		t.Error("Missing metrics port 9090")
+		t.Error("Missing http-metrics port 9090")
 	}
 	if !hasHealthPort {
 		t.Error("Missing grpc-health port 9003")
@@ -152,11 +152,11 @@ func TestBuildEPPDeployment_GRPCProbeService_HA(t *testing.T) {
 	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 	c := dep.Spec.Template.Spec.Containers[0]
 
-	if c.ReadinessProbe.GRPC.Service != nil {
-		t.Error("HA mode readiness probe should have nil service (empty string)")
+	if c.ReadinessProbe.GRPC.Service == nil || *c.ReadinessProbe.GRPC.Service != "readiness" {
+		t.Errorf("HA mode readiness probe service = %v, want \"readiness\"", c.ReadinessProbe.GRPC.Service)
 	}
-	if c.LivenessProbe.GRPC.Service != nil {
-		t.Error("HA mode liveness probe should have nil service (empty string)")
+	if c.LivenessProbe.GRPC.Service == nil || *c.LivenessProbe.GRPC.Service != "liveness" {
+		t.Errorf("HA mode liveness probe service = %v, want \"liveness\"", c.LivenessProbe.GRPC.Service)
 	}
 }
 

@@ -210,15 +210,32 @@ func buildInitContainers(ms *modelv1alpha1.ModelService) []corev1.Container {
 	targetPort := routingProxyTargetPort(ms)
 	always := corev1.ContainerRestartPolicyAlways
 
+	args := []string{
+		"--port", fmt.Sprintf("%d", port),
+		"--vllm-port", fmt.Sprintf("%d", targetPort),
+		"--connector", proxy.Connector,
+	}
+	if proxy.ZapEncoder != "" {
+		args = append(args, "--zap-encoder", proxy.ZapEncoder)
+	}
+	if proxy.ZapLogLevel != "" {
+		args = append(args, "--zap-log-level", proxy.ZapLogLevel)
+	}
+	if proxy.SecureProxy != nil {
+		args = append(args, fmt.Sprintf("--secure-proxy=%t", *proxy.SecureProxy))
+	}
+	if proxy.PrefillerUseTLS != nil {
+		args = append(args, fmt.Sprintf("--prefiller-use-tls=%t", *proxy.PrefillerUseTLS))
+	}
+	if proxy.CertPath != "" {
+		args = append(args, "--cert-path", proxy.CertPath)
+	}
+
 	return []corev1.Container{
 		{
 			Name:  "routing-proxy",
 			Image: proxy.Image,
-			Args: []string{
-				"--port", fmt.Sprintf("%d", port),
-				"--vllm-port", fmt.Sprintf("%d", targetPort),
-				"--connector", proxy.Connector,
-			},
+			Args:  args,
 			Ports: []corev1.ContainerPort{
 				{
 					Name:          "proxy",

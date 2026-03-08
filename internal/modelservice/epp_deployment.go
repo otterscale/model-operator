@@ -34,8 +34,8 @@ const (
 	eppConfigVolume    = "epp-config"
 	eppConfigMountPath = "/config"
 	eppMetricsPort     = 9090
-	eppExtProcPortName = "grpc"
-	eppMetricsPortName = "metrics"
+	eppExtProcPortName = "grpc-ext-proc"
+	eppMetricsPortName = "http-metrics"
 	eppHealthPortName  = "grpc-health"
 )
 
@@ -77,9 +77,11 @@ func BuildEPPDeployment(
 
 	env := buildEPPEnv(eppConfig)
 
-	grpcServiceName := "inference-extension"
+	readinessService := "inference-extension"
+	livenessService := "inference-extension"
 	if *replicas > 1 {
-		grpcServiceName = ""
+		readinessService = "readiness"
+		livenessService = "liveness"
 	}
 
 	return &appsv1.Deployment{
@@ -135,8 +137,8 @@ func BuildEPPDeployment(
 									ReadOnly:  true,
 								},
 							},
-							ReadinessProbe: grpcProbe(eppGRPCHealthPort, grpcServiceName, 5, 2),
-							LivenessProbe:  grpcProbe(eppGRPCHealthPort, grpcServiceName, 5, 10),
+						ReadinessProbe: grpcProbe(eppGRPCHealthPort, readinessService, 5, 2),
+						LivenessProbe:  grpcProbe(eppGRPCHealthPort, livenessService, 5, 10),
 						},
 					},
 					Volumes: []corev1.Volume{

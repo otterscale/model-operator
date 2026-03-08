@@ -18,17 +18,36 @@ package modelservice
 
 import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
 // BuildEPPServiceMonitor constructs a ServiceMonitor that scrapes metrics from the
-// EPP Service's metrics port.
+// EPP Service's metrics port. When metrics endpoint auth is enabled, the endpoint
+// is configured with bearer token authorization from the EPP SA token Secret.
 func BuildEPPServiceMonitor(
 	ms *modelv1alpha1.ModelService,
+	eppConfig EPPConfig,
 	metadataLabels map[string]string,
 ) *monitoringv1.ServiceMonitor {
+	endpoint := monitoringv1.Endpoint{
+		Port:     eppMetricsPortName,
+		Interval: monitoringv1.Duration("30s"),
+	}
+
+	if eppConfig.MetricsEndpointAuth {
+		endpoint.Authorization = &monitoringv1.SafeAuthorization{
+			Credentials: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: EPPSecretName(ms.Name),
+				},
+				Key: "token",
+			},
+		}
+	}
+
 	return &monitoringv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      EPPServiceMonitorName(ms.Name),
@@ -39,12 +58,7 @@ func BuildEPPServiceMonitor(
 			Selector: metav1.LabelSelector{
 				MatchLabels: EPPSelectorLabels(ms.Name),
 			},
-			Endpoints: []monitoringv1.Endpoint{
-				{
-					Port:     eppMetricsPortName,
-					Interval: monitoringv1.Duration("30s"),
-				},
-			},
+			Endpoints: []monitoringv1.Endpoint{endpoint},
 		},
 	}
 }

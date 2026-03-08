@@ -34,7 +34,7 @@ func BuildPodMonitor(
 
 	portName := mon.PortName
 	if portName == "" {
-		portName = "metrics"
+		portName = "http"
 	}
 	path := mon.Path
 	if path == "" {

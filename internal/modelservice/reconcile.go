@@ -318,14 +318,20 @@ func EnsureEPPService(
 }
 
 // EnsureEPPSATokenSecret creates or updates the EPP SA token Secret.
+// The secret is only needed when metrics endpoint authentication is enabled
+// and the provider is not GKE (GKE uses its own PodMonitoring mechanism).
 func EnsureEPPSATokenSecret(
 	ctx context.Context,
 	c client.Client,
 	scheme *runtime.Scheme,
 	ms *modelv1alpha1.ModelService,
+	eppConfig EPPConfig,
 	version string,
 ) error {
-	if ms.Spec.InferencePool == nil {
+	needsSecret := ms.Spec.InferencePool != nil &&
+		eppConfig.MetricsEndpointAuth &&
+		eppConfig.Provider != ProviderGKE
+	if !needsSecret {
 		return cleanupTyped(ctx, c, &corev1.Secret{ObjectMeta: objMeta(ms.Namespace, EPPSecretName(ms.Name))})
 	}
 	metadataLabels := EPPLabels(ms.Name, version)
@@ -433,6 +439,7 @@ func cleanupClusterTyped(ctx context.Context, c client.Client, obj client.Object
 
 // ensureClusterResource is a create-or-update for cluster-scoped resources
 // (no OwnerReference since owner is namespaced).
+// A deep-equal check is performed after mutation to skip no-op updates.
 func ensureClusterResource[T client.Object](
 	ctx context.Context,
 	c client.Client,
@@ -458,7 +465,11 @@ func ensureClusterResource[T client.Object](
 		return err
 	}
 
+	before := existing.DeepCopyObject()
 	mutateFn(existing, desired)
+	if equality.Semantic.DeepEqual(before, existing) {
+		return nil
+	}
 	if err := c.Update(ctx, existing); err != nil {
 		return fmt.Errorf("updating %s %s: %w", kind, name, err)
 	}
@@ -496,6 +507,7 @@ func EnsureEPPServiceMonitor(
 	c client.Client,
 	scheme *runtime.Scheme,
 	ms *modelv1alpha1.ModelService,
+	eppConfig EPPConfig,
 	version string,
 ) error {
 	name := EPPServiceMonitorName(ms.Name)
@@ -507,7 +519,7 @@ func EnsureEPPServiceMonitor(
 		return cleanupTyped(ctx, c, &monitoringv1.ServiceMonitor{ObjectMeta: objMeta(ms.Namespace, name)})
 	}
 	metadataLabels := EPPLabels(ms.Name, version)
-	desired := BuildEPPServiceMonitor(ms, metadataLabels)
+	desired := BuildEPPServiceMonitor(ms, eppConfig, metadataLabels)
 	return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *monitoringv1.ServiceMonitor) {
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
@@ -516,6 +528,7 @@ func EnsureEPPServiceMonitor(
 
 // ensureResource is a generic create-or-update for typed resources.
 // The mutateFn copies desired fields into the existing object.
+// A deep-equal check is performed after mutation to skip no-op updates.
 func ensureResource[T client.Object](
 	ctx context.Context,
 	c client.Client,
@@ -548,8 +561,11 @@ func ensureResource[T client.Object](
 		return err
 	}
 
+	before := existing.DeepCopyObject()
 	mutateFn(existing, desired)
-	existing.SetResourceVersion(existing.GetResourceVersion())
+	if equality.Semantic.DeepEqual(before, existing) {
+		return nil
+	}
 	if err := c.Update(ctx, existing); err != nil {
 		return fmt.Errorf("updating %s %s: %w", kind, name, err)
 	}
