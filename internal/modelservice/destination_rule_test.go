@@ -29,21 +29,21 @@ func TestBuildDestinationRule(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "qwen3",
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 	}
 
 	labels := map[string]string{"component": "epp"}
 	dr := BuildDestinationRule(ms, labels)
 
-	if dr.Name != "qwen3-epp" {
-		t.Errorf("Name = %q, want qwen3-epp", dr.Name)
+	if dr.Name != TestEPPName {
+		t.Errorf("Name = %q, want %s", dr.Name, TestEPPName)
 	}
-	if dr.Namespace != "ml-serving" {
-		t.Errorf("Namespace = %q, want ml-serving", dr.Namespace)
+	if dr.Namespace != TestNamespace {
+		t.Errorf("Namespace = %q, want %s", dr.Namespace, TestNamespace)
 	}
 
-	expectedHost := "qwen3-epp.ml-serving.svc.cluster.local"
+	expectedHost := TestEPPName + "." + TestNamespace + ".svc.cluster.local"
 	if dr.Spec.Host != expectedHost {
 		t.Errorf("Host = %q, want %q", dr.Spec.Host, expectedHost)
 	}

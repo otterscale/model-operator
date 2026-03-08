@@ -32,7 +32,7 @@ func newEPPTestModelService() *modelv1alpha1.ModelService {
 	return &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "qwen3",
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 		Spec: modelv1alpha1.ModelServiceSpec{
 			Engine: modelv1alpha1.EngineSpec{Port: 8000},
@@ -55,11 +55,11 @@ func TestBuildEPPDeployment_Basics(t *testing.T) {
 
 	dep := BuildEPPDeployment(ms, eppConfig, labels, selLabels, "abc123")
 
-	if dep.Name != "qwen3-epp" {
-		t.Errorf("Name = %q, want qwen3-epp", dep.Name)
+	if dep.Name != TestEPPName {
+		t.Errorf("Name = %q, want %s", dep.Name, TestEPPName)
 	}
-	if dep.Namespace != "ml-serving" {
-		t.Errorf("Namespace = %q, want ml-serving", dep.Namespace)
+	if dep.Namespace != TestNamespace {
+		t.Errorf("Namespace = %q, want %s", dep.Namespace, TestNamespace)
 	}
 	if *dep.Spec.Replicas != 2 {
 		t.Errorf("Replicas = %d, want 2", *dep.Spec.Replicas)
@@ -106,7 +106,7 @@ func TestBuildEPPDeployment_Container(t *testing.T) {
 	hasHealthPort := false
 	for _, p := range c.Ports {
 		switch {
-		case p.Name == "grpc-ext-proc" && p.ContainerPort == 9002:
+		case p.Name == eppExtProcPortName && p.ContainerPort == 9002:
 			hasExtProcPort = true
 		case p.Name == "http-metrics" && p.ContainerPort == 9090:
 			hasMetricsPort = true
@@ -115,7 +115,7 @@ func TestBuildEPPDeployment_Container(t *testing.T) {
 		}
 	}
 	if !hasExtProcPort {
-		t.Error("Missing grpc-ext-proc port 9002")
+		t.Errorf("Missing %s port 9002", eppExtProcPortName)
 	}
 	if !hasMetricsPort {
 		t.Error("Missing http-metrics port 9090")
@@ -165,8 +165,8 @@ func TestBuildEPPDeployment_GRPCProbeService_Single(t *testing.T) {
 	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 	c := dep.Spec.Template.Spec.Containers[0]
 
-	if c.ReadinessProbe.GRPC.Service == nil || *c.ReadinessProbe.GRPC.Service != "inference-extension" {
-		t.Error("Single-replica readiness probe should have service=inference-extension")
+	if c.ReadinessProbe.GRPC.Service == nil || *c.ReadinessProbe.GRPC.Service != eppSingleReplicaProbeService {
+		t.Errorf("Single-replica readiness probe should have service=%s", eppSingleReplicaProbeService)
 	}
 }
 
@@ -479,8 +479,8 @@ func TestBuildEPPDeployment_ServiceAccount(t *testing.T) {
 	ms := newEPPTestModelService()
 	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 
-	if dep.Spec.Template.Spec.ServiceAccountName != "qwen3-epp" {
-		t.Errorf("ServiceAccountName = %q, want qwen3-epp", dep.Spec.Template.Spec.ServiceAccountName)
+	if dep.Spec.Template.Spec.ServiceAccountName != TestEPPName {
+		t.Errorf("ServiceAccountName = %q, want %s", dep.Spec.Template.Spec.ServiceAccountName, TestEPPName)
 	}
 }
 
@@ -490,7 +490,7 @@ func TestBuildEPPDeployment_ConfigMapVolume(t *testing.T) {
 
 	found := false
 	for _, v := range dep.Spec.Template.Spec.Volumes {
-		if v.Name == "epp-config" && v.ConfigMap != nil && v.ConfigMap.Name == "qwen3-epp-config" {
+		if v.Name == eppConfigVolume && v.ConfigMap != nil && v.ConfigMap.Name == EPPConfigMapName("qwen3") {
 			found = true
 		}
 	}

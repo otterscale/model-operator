@@ -29,7 +29,7 @@ func TestBuildInferencePool(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "qwen3-32b",
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 		Spec: modelv1alpha1.ModelServiceSpec{
 			Engine: modelv1alpha1.EngineSpec{Port: 8000},
@@ -48,8 +48,8 @@ func TestBuildInferencePool(t *testing.T) {
 	if pool.Name != "qwen3-32b" {
 		t.Errorf("Name = %q, want qwen3-32b", pool.Name)
 	}
-	if pool.Namespace != "ml-serving" {
-		t.Errorf("Namespace = %q, want ml-serving", pool.Namespace)
+	if pool.Namespace != TestNamespace {
+		t.Errorf("Namespace = %q, want %s", pool.Namespace, TestNamespace)
 	}
 
 	if len(pool.Spec.TargetPorts) != 1 {

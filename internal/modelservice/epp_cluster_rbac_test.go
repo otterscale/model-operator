@@ -28,14 +28,14 @@ func TestBuildEPPClusterRBAC(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "qwen3",
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 	}
 	labels := map[string]string{"app": "epp"}
 
 	role, binding := BuildEPPClusterRBAC(ms, labels)
 
-	expectedName := "ml-serving-qwen3-epp"
+	expectedName := TestNamespace + "-" + TestEPPName
 	if role.Name != expectedName {
 		t.Errorf("ClusterRole name = %q, want %q", role.Name, expectedName)
 	}
@@ -78,11 +78,11 @@ func TestBuildEPPClusterRBAC(t *testing.T) {
 	if len(binding.Subjects) != 1 {
 		t.Fatalf("Subjects = %d, want 1", len(binding.Subjects))
 	}
-	if binding.Subjects[0].Name != "qwen3-epp" {
-		t.Errorf("Subject name = %q, want qwen3-epp", binding.Subjects[0].Name)
+	if binding.Subjects[0].Name != TestEPPName {
+		t.Errorf("Subject name = %q, want %s", binding.Subjects[0].Name, TestEPPName)
 	}
-	if binding.Subjects[0].Namespace != "ml-serving" {
-		t.Errorf("Subject namespace = %q, want ml-serving", binding.Subjects[0].Namespace)
+	if binding.Subjects[0].Namespace != TestNamespace {
+		t.Errorf("Subject namespace = %q, want %s", binding.Subjects[0].Namespace, TestNamespace)
 	}
 	if binding.RoleRef.Kind != "ClusterRole" {
 		t.Errorf("RoleRef kind = %q, want ClusterRole", binding.RoleRef.Kind)

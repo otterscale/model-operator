@@ -33,7 +33,7 @@ func newTestModelService() *modelv1alpha1.ModelService {
 	return &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "qwen3-32b",
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 		Spec: modelv1alpha1.ModelServiceSpec{
 			Model: modelv1alpha1.ModelSpec{
@@ -70,7 +70,7 @@ func TestBuildDeployment_Basic(t *testing.T) {
 	if dep.Name != "qwen3-32b-decode" {
 		t.Errorf("Name = %q", dep.Name)
 	}
-	if dep.Namespace != "ml-serving" {
+	if dep.Namespace != TestNamespace {
 		t.Errorf("Namespace = %q", dep.Namespace)
 	}
 	if *dep.Spec.Replicas != 2 {

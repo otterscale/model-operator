@@ -30,13 +30,14 @@ import (
 )
 
 const (
-	eppContainerName   = "epp"
-	eppConfigVolume    = "epp-config"
-	eppConfigMountPath = "/config"
-	eppMetricsPort     = 9090
-	eppExtProcPortName = "grpc-ext-proc"
-	eppMetricsPortName = "http-metrics"
-	eppHealthPortName  = "grpc-health"
+	eppContainerName             = "epp"
+	eppConfigVolume              = "epp-config"
+	eppConfigMountPath           = "/config"
+	eppMetricsPort               = 9090
+	eppExtProcPortName           = "grpc-ext-proc"
+	eppMetricsPortName           = "http-metrics"
+	eppHealthPortName            = "grpc-health"
+	eppSingleReplicaProbeService = "inference-extension"
 )
 
 // BuildEPPDeployment constructs the EPP Deployment.
@@ -77,8 +78,8 @@ func BuildEPPDeployment(
 
 	env := buildEPPEnv(eppConfig)
 
-	readinessService := "inference-extension"
-	livenessService := "inference-extension"
+	readinessService := eppSingleReplicaProbeService
+	livenessService := eppSingleReplicaProbeService
 	if *replicas > 1 {
 		readinessService = "readiness"
 		livenessService = "liveness"
@@ -285,7 +286,7 @@ func grpcProbe(port int32, service string, initialDelay, period int32) *corev1.P
 		PeriodSeconds:       period,
 	}
 	if service != "" {
-		probe.ProbeHandler.GRPC.Service = &service
+		probe.GRPC.Service = &service
 	}
 	return probe
 }

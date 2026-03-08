@@ -25,6 +25,12 @@ import (
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
+// Shared test constants for modelservice package tests.
+const (
+	TestNamespace = "ml-serving"
+	TestEPPName   = "qwen3-epp"
+)
+
 func TestGPUResourceName(t *testing.T) {
 	tests := []struct {
 		accel modelv1alpha1.AcceleratorType

@@ -28,14 +28,14 @@ func TestBuildEPPRBAC_SingleReplica(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "qwen3",
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 	}
 
 	role, binding := BuildEPPRBAC(ms, nil, 1)
 
-	if role.Name != "qwen3-epp" {
-		t.Errorf("Role name = %q, want qwen3-epp", role.Name)
+	if role.Name != TestEPPName {
+		t.Errorf("Role name = %q, want %s", role.Name, TestEPPName)
 	}
 	if len(role.Rules) != 3 {
 		t.Fatalf("Role rules = %d, want 3 (pods + experimental + GA)", len(role.Rules))
@@ -78,17 +78,17 @@ func TestBuildEPPRBAC_SingleReplica(t *testing.T) {
 	}
 
 	// RoleBinding checks
-	if binding.Name != "qwen3-epp" {
-		t.Errorf("RoleBinding name = %q, want qwen3-epp", binding.Name)
+	if binding.Name != TestEPPName {
+		t.Errorf("RoleBinding name = %q, want %s", binding.Name, TestEPPName)
 	}
 	if len(binding.Subjects) != 1 {
 		t.Fatalf("Subjects = %d, want 1", len(binding.Subjects))
 	}
-	if binding.Subjects[0].Name != "qwen3-epp" {
-		t.Errorf("Subject name = %q, want qwen3-epp", binding.Subjects[0].Name)
+	if binding.Subjects[0].Name != TestEPPName {
+		t.Errorf("Subject name = %q, want %s", binding.Subjects[0].Name, TestEPPName)
 	}
-	if binding.RoleRef.Name != "qwen3-epp" {
-		t.Errorf("RoleRef name = %q, want qwen3-epp", binding.RoleRef.Name)
+	if binding.RoleRef.Name != TestEPPName {
+		t.Errorf("RoleRef name = %q, want %s", binding.RoleRef.Name, TestEPPName)
 	}
 }
 
@@ -96,7 +96,7 @@ func TestBuildEPPRBAC_MultipleReplicas(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "qwen3",
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 	}
 

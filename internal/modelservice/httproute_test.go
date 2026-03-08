@@ -31,7 +31,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testModelServiceName,
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 		Spec: modelv1alpha1.ModelServiceSpec{
 			HTTPRoute: &modelv1alpha1.HTTPRouteSpec{
@@ -49,8 +49,8 @@ func TestBuildHTTPRoute(t *testing.T) {
 	if route.Name != testModelServiceName {
 		t.Errorf("Name = %q, want %q", route.Name, testModelServiceName)
 	}
-	if route.Namespace != "ml-serving" {
-		t.Errorf("Namespace = %q, want ml-serving", route.Namespace)
+	if route.Namespace != TestNamespace {
+		t.Errorf("Namespace = %q, want %s", route.Namespace, TestNamespace)
 	}
 
 	if len(route.Spec.ParentRefs) != 1 {
@@ -74,7 +74,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 	if len(backends) != 1 {
 		t.Fatalf("BackendRefs len = %d, want 1", len(backends))
 	}
-	ref := backends[0].BackendRef.BackendObjectReference
+	ref := backends[0].BackendObjectReference
 	if ref.Kind == nil || string(*ref.Kind) != "InferencePool" {
 		t.Errorf("Backend kind = %v, want InferencePool", ref.Kind)
 	}
@@ -90,7 +90,7 @@ func TestBuildHTTPRoute_CrossNamespaceGateway(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 		Spec: modelv1alpha1.ModelServiceSpec{
 			HTTPRoute: &modelv1alpha1.HTTPRouteSpec{

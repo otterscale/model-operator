@@ -28,7 +28,7 @@ func TestBuildEPPService(t *testing.T) {
 	ms := &modelv1alpha1.ModelService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "qwen3",
-			Namespace: "ml-serving",
+			Namespace: TestNamespace,
 		},
 		Spec: modelv1alpha1.ModelServiceSpec{
 			InferencePool: &modelv1alpha1.InferencePoolSpec{
@@ -41,8 +41,8 @@ func TestBuildEPPService(t *testing.T) {
 
 	svc := BuildEPPService(ms, nil, map[string]string{"sel": "epp"})
 
-	if svc.Name != "qwen3-epp" {
-		t.Errorf("Name = %q, want qwen3-epp", svc.Name)
+	if svc.Name != TestEPPName {
+		t.Errorf("Name = %q, want %s", svc.Name, TestEPPName)
 	}
 
 	if len(svc.Spec.Ports) != 2 {
@@ -52,7 +52,7 @@ func TestBuildEPPService(t *testing.T) {
 	hasGRPC := false
 	hasMetrics := false
 	for _, p := range svc.Spec.Ports {
-		if p.Name == "grpc-ext-proc" && p.Port == 9002 {
+		if p.Name == eppExtProcPortName && p.Port == 9002 {
 			hasGRPC = true
 		}
 		if p.Name == "http-metrics" && p.Port == 9090 {
@@ -60,7 +60,7 @@ func TestBuildEPPService(t *testing.T) {
 		}
 	}
 	if !hasGRPC {
-		t.Error("Missing grpc-ext-proc port 9002")
+		t.Errorf("Missing %s port 9002", eppExtProcPortName)
 	}
 	if !hasMetrics {
 		t.Error("Missing http-metrics port 9090")
@@ -86,7 +86,7 @@ func TestBuildEPPService_CustomPort(t *testing.T) {
 	svc := BuildEPPService(ms, nil, nil)
 
 	for _, p := range svc.Spec.Ports {
-		if p.Name == "grpc-ext-proc" && p.Port != 9999 {
+		if p.Name == eppExtProcPortName && p.Port != 9999 {
 			t.Errorf("gRPC port = %d, want 9999", p.Port)
 		}
 	}
