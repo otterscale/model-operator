@@ -17,7 +17,8 @@ limitations under the License.
 package modelservice
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,118 +32,87 @@ const (
 	TestEPPName   = "qwen3-epp"
 )
 
-func TestGPUResourceName(t *testing.T) {
-	tests := []struct {
-		accel modelv1alpha1.AcceleratorType
-		want  corev1.ResourceName
-	}{
-		{modelv1alpha1.AcceleratorNvidia, "nvidia.com/gpu"},
-		{modelv1alpha1.AcceleratorAMD, "amd.com/gpu"},
-		{modelv1alpha1.AcceleratorIntelGaudi, "habana.ai/gaudi"},
-		{modelv1alpha1.AcceleratorGoogle, "google.com/tpu"},
-		{modelv1alpha1.AcceleratorCPU, ""},
-	}
+var _ = Describe("GPUResourceName", func() {
+	DescribeTable("maps accelerator types to Kubernetes resource names",
+		func(accel modelv1alpha1.AcceleratorType, want corev1.ResourceName) {
+			Expect(GPUResourceName(accel)).To(Equal(want))
+		},
+		Entry("Nvidia", modelv1alpha1.AcceleratorNvidia, corev1.ResourceName("nvidia.com/gpu")),
+		Entry("AMD", modelv1alpha1.AcceleratorAMD, corev1.ResourceName("amd.com/gpu")),
+		Entry("Intel Gaudi", modelv1alpha1.AcceleratorIntelGaudi, corev1.ResourceName("habana.ai/gaudi")),
+		Entry("Google TPU", modelv1alpha1.AcceleratorGoogle, corev1.ResourceName("google.com/tpu")),
+		Entry("CPU returns empty", modelv1alpha1.AcceleratorCPU, corev1.ResourceName("")),
+	)
+})
 
-	for _, tt := range tests {
-		t.Run(string(tt.accel), func(t *testing.T) {
-			got := GPUResourceName(tt.accel)
-			if got != tt.want {
-				t.Errorf("GPUResourceName(%q) = %q, want %q", tt.accel, got, tt.want)
-			}
-		})
-	}
-}
+var _ = Describe("GPUCount", func() {
+	DescribeTable("calculates GPU count from parallelism",
+		func(p modelv1alpha1.ParallelismSpec, want int32) {
+			Expect(GPUCount(p)).To(Equal(want))
+		},
+		Entry("defaults", modelv1alpha1.ParallelismSpec{}, int32(1)),
+		Entry("tensor=4", modelv1alpha1.ParallelismSpec{Tensor: 4}, int32(4)),
+		Entry("tensor=4,dataLocal=2", modelv1alpha1.ParallelismSpec{Tensor: 4, DataLocal: 2}, int32(8)),
+		Entry("tensor=1,dataLocal=1", modelv1alpha1.ParallelismSpec{Tensor: 1, DataLocal: 1}, int32(1)),
+	)
+})
 
-func TestGPUCount(t *testing.T) {
-	tests := []struct {
-		name string
-		p    modelv1alpha1.ParallelismSpec
-		want int32
-	}{
-		{"defaults", modelv1alpha1.ParallelismSpec{}, 1},
-		{"tensor=4", modelv1alpha1.ParallelismSpec{Tensor: 4}, 4},
-		{"tensor=4,dataLocal=2", modelv1alpha1.ParallelismSpec{Tensor: 4, DataLocal: 2}, 8},
-		{"tensor=1,dataLocal=1", modelv1alpha1.ParallelismSpec{Tensor: 1, DataLocal: 1}, 1},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GPUCount(tt.p)
-			if got != tt.want {
-				t.Errorf("GPUCount() = %d, want %d", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestInjectGPUResources(t *testing.T) {
-	t.Run("nvidia with 4 GPUs", func(t *testing.T) {
+var _ = Describe("InjectGPUResources", func() {
+	It("should inject nvidia GPU limits and requests", func() {
 		res := &corev1.ResourceRequirements{}
 		InjectGPUResources(res, modelv1alpha1.AcceleratorNvidia, 4)
 
 		expected := resource.MustParse("4")
-		if got := res.Limits[corev1.ResourceName("nvidia.com/gpu")]; !got.Equal(expected) {
-			t.Errorf("GPU limits = %s, want %s", got.String(), expected.String())
-		}
-		if got := res.Requests[corev1.ResourceName("nvidia.com/gpu")]; !got.Equal(expected) {
-			t.Errorf("GPU requests = %s, want %s", got.String(), expected.String())
-		}
+		Expect(res.Limits[corev1.ResourceName("nvidia.com/gpu")]).To(Equal(expected))
+		Expect(res.Requests[corev1.ResourceName("nvidia.com/gpu")]).To(Equal(expected))
 	})
 
-	t.Run("CPU skips injection", func(t *testing.T) {
+	It("should skip injection for CPU accelerator", func() {
 		res := &corev1.ResourceRequirements{}
 		InjectGPUResources(res, modelv1alpha1.AcceleratorCPU, 4)
 
-		if res.Limits != nil {
-			t.Error("Expected nil Limits for CPU accelerator")
-		}
+		Expect(res.Limits).To(BeNil())
 	})
 
-	t.Run("zero count skips injection", func(t *testing.T) {
+	It("should skip injection for zero count", func() {
 		res := &corev1.ResourceRequirements{}
 		InjectGPUResources(res, modelv1alpha1.AcceleratorNvidia, 0)
 
-		if res.Limits != nil {
-			t.Error("Expected nil Limits for zero count")
-		}
+		Expect(res.Limits).To(BeNil())
 	})
-}
+})
 
-func TestNaming(t *testing.T) {
-	if got := DecodeName("qwen3"); got != "qwen3-decode" {
-		t.Errorf("DecodeName = %q", got)
-	}
-	if got := PrefillName("qwen3"); got != "qwen3-prefill" {
-		t.Errorf("PrefillName = %q", got)
-	}
-	if got := InferencePoolName("qwen3"); got != "qwen3" {
-		t.Errorf("InferencePoolName = %q", got)
-	}
-	if got := PodMonitorName("qwen3", "decode"); got != "qwen3-decode" {
-		t.Errorf("PodMonitorName = %q", got)
-	}
-	if got := EPPName("qwen3"); got != "qwen3-epp" {
-		t.Errorf("EPPName = %q", got)
-	}
-	if got := EPPConfigMapName("qwen3"); got != "qwen3-epp-config" {
-		t.Errorf("EPPConfigMapName = %q", got)
-	}
-	if got := EPPSecretName("qwen3"); got != "qwen3-epp-sa-metrics-reader-secret" {
-		t.Errorf("EPPSecretName = %q", got)
-	}
-	if got := EPPServiceMonitorName("qwen3"); got != "qwen3-epp" {
-		t.Errorf("EPPServiceMonitorName = %q", got)
-	}
-}
+var _ = Describe("Naming helpers", func() {
+	It("should generate correct DecodeName", func() {
+		Expect(DecodeName("qwen3")).To(Equal("qwen3-decode"))
+	})
+	It("should generate correct PrefillName", func() {
+		Expect(PrefillName("qwen3")).To(Equal("qwen3-prefill"))
+	})
+	It("should generate correct InferencePoolName", func() {
+		Expect(InferencePoolName("qwen3")).To(Equal("qwen3"))
+	})
+	It("should generate correct PodMonitorName", func() {
+		Expect(PodMonitorName("qwen3", "decode")).To(Equal("qwen3-decode"))
+	})
+	It("should generate correct EPPName", func() {
+		Expect(EPPName("qwen3")).To(Equal("qwen3-epp"))
+	})
+	It("should generate correct EPPConfigMapName", func() {
+		Expect(EPPConfigMapName("qwen3")).To(Equal("qwen3-epp-config"))
+	})
+	It("should generate correct EPPSecretName", func() {
+		Expect(EPPSecretName("qwen3")).To(Equal("qwen3-epp-sa-metrics-reader-secret"))
+	})
+	It("should generate correct EPPServiceMonitorName", func() {
+		Expect(EPPServiceMonitorName("qwen3")).To(Equal("qwen3-epp"))
+	})
+})
 
-func TestInferencePoolSelectorLabels(t *testing.T) {
-	selectorLabels := InferencePoolSelectorLabels("qwen3")
+var _ = Describe("InferencePoolSelectorLabels", func() {
+	It("should include the inference-serving label", func() {
+		selectorLabels := InferencePoolSelectorLabels("qwen3")
 
-	val, ok := selectorLabels[LabelInferenceServer]
-	if !ok {
-		t.Error("Missing llm-d.ai/inference-serving label")
-	}
-	if val != LabelValueTrue {
-		t.Errorf("Expected llm-d.ai/inference-serving=%s, got %q", LabelValueTrue, val)
-	}
-}
+		Expect(selectorLabels).To(HaveKeyWithValue(LabelInferenceServer, LabelValueTrue))
+	})
+})

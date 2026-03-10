@@ -17,125 +17,96 @@ limitations under the License.
 package modelservice
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
 const testModelServiceName = "qwen3-32b"
 
-func TestBuildHTTPRoute(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      testModelServiceName,
-			Namespace: TestNamespace,
-		},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			HTTPRoute: &modelv1alpha1.HTTPRouteSpec{
-				GatewayRef: modelv1alpha1.GatewayRef{
-					Name: "inference-gateway",
-				},
-				Hostnames: []string{"models.example.com"},
+var _ = Describe("BuildHTTPRoute", func() {
+	It("should construct a valid HTTPRoute with same-namespace gateway", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      testModelServiceName,
+				Namespace: TestNamespace,
 			},
-		},
-	}
-
-	labels := map[string]string{"app": testModelServiceName}
-	route := BuildHTTPRoute(ms, labels)
-
-	if route.Name != testModelServiceName {
-		t.Errorf("Name = %q, want %q", route.Name, testModelServiceName)
-	}
-	if route.Namespace != TestNamespace {
-		t.Errorf("Namespace = %q, want %s", route.Namespace, TestNamespace)
-	}
-
-	if len(route.Spec.ParentRefs) != 1 {
-		t.Fatalf("ParentRefs len = %d, want 1", len(route.Spec.ParentRefs))
-	}
-	if string(route.Spec.ParentRefs[0].Name) != "inference-gateway" {
-		t.Errorf("Gateway name = %q, want inference-gateway", route.Spec.ParentRefs[0].Name)
-	}
-	if route.Spec.ParentRefs[0].Namespace != nil {
-		t.Errorf("Same-namespace gateway should not set Namespace, got %q", *route.Spec.ParentRefs[0].Namespace)
-	}
-
-	if len(route.Spec.Hostnames) != 1 || string(route.Spec.Hostnames[0]) != "models.example.com" {
-		t.Errorf("Hostnames = %v, want [models.example.com]", route.Spec.Hostnames)
-	}
-
-	if len(route.Spec.Rules) != 1 {
-		t.Fatalf("Rules len = %d, want 1", len(route.Spec.Rules))
-	}
-	backends := route.Spec.Rules[0].BackendRefs
-	if len(backends) != 1 {
-		t.Fatalf("BackendRefs len = %d, want 1", len(backends))
-	}
-	ref := backends[0].BackendObjectReference
-	if ref.Kind == nil || string(*ref.Kind) != "InferencePool" {
-		t.Errorf("Backend kind = %v, want InferencePool", ref.Kind)
-	}
-	if ref.Group == nil || string(*ref.Group) != "inference.networking.k8s.io" {
-		t.Errorf("Backend group = %v, want inference.networking.k8s.io", ref.Group)
-	}
-	if string(ref.Name) != testModelServiceName {
-		t.Errorf("Backend name = %q, want %q", ref.Name, testModelServiceName)
-	}
-}
-
-func TestBuildHTTPRoute_CrossNamespaceGateway(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: TestNamespace,
-		},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			HTTPRoute: &modelv1alpha1.HTTPRouteSpec{
-				GatewayRef: modelv1alpha1.GatewayRef{
-					Name:      "shared-gateway",
-					Namespace: "infra",
+			Spec: modelv1alpha1.ModelServiceSpec{
+				HTTPRoute: &modelv1alpha1.HTTPRouteSpec{
+					GatewayRef: modelv1alpha1.GatewayRef{
+						Name: "inference-gateway",
+					},
+					Hostnames: []string{"models.example.com"},
 				},
 			},
-		},
-	}
+		}
 
-	route := BuildHTTPRoute(ms, nil)
+		labels := map[string]string{"app": testModelServiceName}
+		route := BuildHTTPRoute(ms, labels)
 
-	ref := route.Spec.ParentRefs[0]
-	if ref.Namespace == nil {
-		t.Fatal("Cross-namespace gateway should set Namespace")
-	}
-	if string(*ref.Namespace) != "infra" {
-		t.Errorf("Gateway namespace = %q, want infra", *ref.Namespace)
-	}
-}
+		Expect(route.Name).To(Equal(testModelServiceName))
+		Expect(route.Namespace).To(Equal(TestNamespace))
 
-func TestBuildHTTPRoute_NoHostnames(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "default",
-		},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			HTTPRoute: &modelv1alpha1.HTTPRouteSpec{
-				GatewayRef: modelv1alpha1.GatewayRef{Name: "gw"},
+		Expect(route.Spec.ParentRefs).To(HaveLen(1))
+		Expect(string(route.Spec.ParentRefs[0].Name)).To(Equal("inference-gateway"))
+		Expect(route.Spec.ParentRefs[0].Namespace).To(BeNil(), "Same-namespace gateway should not set Namespace")
+
+		Expect(route.Spec.Hostnames).To(HaveLen(1))
+		Expect(string(route.Spec.Hostnames[0])).To(Equal("models.example.com"))
+
+		Expect(route.Spec.Rules).To(HaveLen(1))
+		backends := route.Spec.Rules[0].BackendRefs
+		Expect(backends).To(HaveLen(1))
+		ref := backends[0].BackendObjectReference
+		Expect(ref.Kind).NotTo(BeNil())
+		Expect(string(*ref.Kind)).To(Equal("InferencePool"))
+		Expect(ref.Group).NotTo(BeNil())
+		Expect(string(*ref.Group)).To(Equal("inference.networking.k8s.io"))
+		Expect(string(ref.Name)).To(Equal(testModelServiceName))
+	})
+
+	It("should set namespace for cross-namespace gateway", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: TestNamespace,
 			},
-		},
-	}
+			Spec: modelv1alpha1.ModelServiceSpec{
+				HTTPRoute: &modelv1alpha1.HTTPRouteSpec{
+					GatewayRef: modelv1alpha1.GatewayRef{
+						Name:      "shared-gateway",
+						Namespace: "infra",
+					},
+				},
+			},
+		}
 
-	route := BuildHTTPRoute(ms, nil)
+		route := BuildHTTPRoute(ms, nil)
 
-	if len(route.Spec.Hostnames) != 0 {
-		t.Errorf("Expected no hostnames, got %v", route.Spec.Hostnames)
-	}
+		ref := route.Spec.ParentRefs[0]
+		Expect(ref.Namespace).NotTo(BeNil(), "Cross-namespace gateway should set Namespace")
+		Expect(string(*ref.Namespace)).To(Equal("infra"))
+	})
 
-	// BackendRef should still reference InferencePool
-	if string(route.Spec.Rules[0].BackendRefs[0].Name) != "test" {
-		t.Errorf("Backend name = %q, want test", route.Spec.Rules[0].BackendRefs[0].Name)
-	}
+	It("should omit hostnames when not specified", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "default",
+			},
+			Spec: modelv1alpha1.ModelServiceSpec{
+				HTTPRoute: &modelv1alpha1.HTTPRouteSpec{
+					GatewayRef: modelv1alpha1.GatewayRef{Name: "gw"},
+				},
+			},
+		}
 
-	_ = gatewayv1.HTTPRoute{} // verify import
-}
+		route := BuildHTTPRoute(ms, nil)
+
+		Expect(route.Spec.Hostnames).To(BeEmpty())
+		Expect(string(route.Spec.Rules[0].BackendRefs[0].Name)).To(Equal("test"))
+	})
+})
