@@ -17,7 +17,8 @@ limitations under the License.
 package modelservice
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inferenceextv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
@@ -25,109 +26,83 @@ import (
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
-func TestBuildInferencePool(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "qwen3-32b",
-			Namespace: TestNamespace,
-		},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Engine: modelv1alpha1.EngineSpec{Port: 8000},
-			InferencePool: &modelv1alpha1.InferencePoolSpec{
-				EndpointPicker: modelv1alpha1.EndpointPickerSpec{
-					Port:        9002,
-					FailureMode: modelv1alpha1.EPPFailureModeOpen,
+var _ = Describe("BuildInferencePool", func() {
+	It("should construct a valid InferencePool with explicit values", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "qwen3-32b",
+				Namespace: TestNamespace,
+			},
+			Spec: modelv1alpha1.ModelServiceSpec{
+				Engine: modelv1alpha1.EngineSpec{Port: 8000},
+				InferencePool: &modelv1alpha1.InferencePoolSpec{
+					EndpointPicker: modelv1alpha1.EndpointPickerSpec{
+						Port:        9002,
+						FailureMode: modelv1alpha1.EPPFailureModeOpen,
+					},
 				},
 			},
-		},
-	}
+		}
 
-	labels := map[string]string{"app": "qwen3-32b"}
-	pool := BuildInferencePool(ms, labels)
+		labels := map[string]string{"app": "qwen3-32b"}
+		pool := BuildInferencePool(ms, labels)
 
-	if pool.Name != "qwen3-32b" {
-		t.Errorf("Name = %q, want qwen3-32b", pool.Name)
-	}
-	if pool.Namespace != TestNamespace {
-		t.Errorf("Namespace = %q, want %s", pool.Namespace, TestNamespace)
-	}
+		Expect(pool.Name).To(Equal("qwen3-32b"))
+		Expect(pool.Namespace).To(Equal(TestNamespace))
 
-	if len(pool.Spec.TargetPorts) != 1 {
-		t.Fatalf("TargetPorts len = %d, want 1", len(pool.Spec.TargetPorts))
-	}
-	if pool.Spec.TargetPorts[0].Number != 8000 {
-		t.Errorf("TargetPort = %d, want 8000", pool.Spec.TargetPorts[0].Number)
-	}
+		Expect(pool.Spec.TargetPorts).To(HaveLen(1))
+		Expect(pool.Spec.TargetPorts[0].Number).To(Equal(inferenceextv1.PortNumber(8000)))
 
-	eppRef := pool.Spec.EndpointPickerRef
-	if string(eppRef.Name) != "qwen3-32b-epp" {
-		t.Errorf("EPP name = %q, want qwen3-32b-epp", eppRef.Name)
-	}
-	if eppRef.Port == nil || eppRef.Port.Number != 9002 {
-		t.Errorf("EPP port = %v, want 9002", eppRef.Port)
-	}
-	if eppRef.FailureMode != inferenceextv1.EndpointPickerFailOpen {
-		t.Errorf("FailureMode = %q, want FailOpen", eppRef.FailureMode)
-	}
-}
+		eppRef := pool.Spec.EndpointPickerRef
+		Expect(string(eppRef.Name)).To(Equal("qwen3-32b-epp"))
+		Expect(eppRef.Port).NotTo(BeNil())
+		Expect(eppRef.Port.Number).To(Equal(inferenceextv1.PortNumber(9002)))
+		Expect(eppRef.FailureMode).To(Equal(inferenceextv1.EndpointPickerFailOpen))
+	})
 
-func TestBuildInferencePool_DefaultValues(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "default",
-		},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Engine: modelv1alpha1.EngineSpec{},
-			InferencePool: &modelv1alpha1.InferencePoolSpec{
-				EndpointPicker: modelv1alpha1.EndpointPickerSpec{},
+	It("should use default values when not specified", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "default",
 			},
-		},
-	}
-
-	pool := BuildInferencePool(ms, nil)
-
-	// Default engine port = 8000
-	if pool.Spec.TargetPorts[0].Number != 8000 {
-		t.Errorf("Default TargetPort = %d, want 8000", pool.Spec.TargetPorts[0].Number)
-	}
-
-	// Default EPP port = 9002
-	if pool.Spec.EndpointPickerRef.Port.Number != 9002 {
-		t.Errorf("Default EPP port = %d, want 9002", pool.Spec.EndpointPickerRef.Port.Number)
-	}
-
-	// Default failure mode = FailOpen
-	if pool.Spec.EndpointPickerRef.FailureMode != inferenceextv1.EndpointPickerFailOpen {
-		t.Errorf("Default FailureMode = %q, want FailOpen", pool.Spec.EndpointPickerRef.FailureMode)
-	}
-}
-
-func TestBuildInferencePool_SelectorLabels(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "default",
-		},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Engine: modelv1alpha1.EngineSpec{},
-			InferencePool: &modelv1alpha1.InferencePoolSpec{
-				EndpointPicker: modelv1alpha1.EndpointPickerSpec{},
+			Spec: modelv1alpha1.ModelServiceSpec{
+				Engine: modelv1alpha1.EngineSpec{},
+				InferencePool: &modelv1alpha1.InferencePoolSpec{
+					EndpointPicker: modelv1alpha1.EndpointPickerSpec{},
+				},
 			},
-		},
-	}
+		}
 
-	pool := BuildInferencePool(ms, nil)
+		pool := BuildInferencePool(ms, nil)
 
-	if len(pool.Spec.Selector.MatchLabels) == 0 {
-		t.Fatal("Selector.MatchLabels should not be empty")
-	}
+		// Default engine port = 8000
+		Expect(pool.Spec.TargetPorts[0].Number).To(Equal(inferenceextv1.PortNumber(8000)))
+		// Default EPP port = 9002
+		Expect(pool.Spec.EndpointPickerRef.Port.Number).To(Equal(inferenceextv1.PortNumber(9002)))
+		// Default failure mode = FailOpen
+		Expect(pool.Spec.EndpointPickerRef.FailureMode).To(Equal(inferenceextv1.EndpointPickerFailOpen))
+	})
 
-	val, ok := pool.Spec.Selector.MatchLabels[inferenceextv1.LabelKey(LabelInferenceServer)]
-	if !ok {
-		t.Error("Missing llm-d.ai/inference-serving label in selector")
-	}
-	if string(val) != LabelValueTrue {
-		t.Errorf("LabelInferenceServer = %q, want %q", val, LabelValueTrue)
-	}
-}
+	It("should include the inference-serving selector label", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "default",
+			},
+			Spec: modelv1alpha1.ModelServiceSpec{
+				Engine: modelv1alpha1.EngineSpec{},
+				InferencePool: &modelv1alpha1.InferencePoolSpec{
+					EndpointPicker: modelv1alpha1.EndpointPickerSpec{},
+				},
+			},
+		}
+
+		pool := BuildInferencePool(ms, nil)
+
+		Expect(pool.Spec.Selector.MatchLabels).NotTo(BeEmpty())
+		val, ok := pool.Spec.Selector.MatchLabels[inferenceextv1.LabelKey(LabelInferenceServer)]
+		Expect(ok).To(BeTrue(), "Missing llm-d.ai/inference-serving label in selector")
+		Expect(string(val)).To(Equal(LabelValueTrue))
+	})
+})

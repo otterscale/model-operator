@@ -17,84 +17,80 @@ limitations under the License.
 package modelservice
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
-func TestBuildEPPClusterRBAC(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "qwen3",
-			Namespace: TestNamespace,
-		},
-	}
-	labels := map[string]string{"app": "epp"}
+var _ = Describe("BuildEPPClusterRBAC", func() {
+	var (
+		ms     *modelv1alpha1.ModelService
+		labels map[string]string
+	)
 
-	role, binding := BuildEPPClusterRBAC(ms, labels)
+	BeforeEach(func() {
+		ms = &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "qwen3",
+				Namespace: TestNamespace,
+			},
+		}
+		labels = map[string]string{"app": "epp"}
+	})
 
-	expectedName := TestNamespace + "-" + TestEPPName
-	if role.Name != expectedName {
-		t.Errorf("ClusterRole name = %q, want %q", role.Name, expectedName)
-	}
-	if binding.Name != expectedName {
-		t.Errorf("ClusterRoleBinding name = %q, want %q", binding.Name, expectedName)
-	}
+	It("should set correct names for ClusterRole and ClusterRoleBinding", func() {
+		role, binding := BuildEPPClusterRBAC(ms, labels)
 
-	if len(role.Rules) != 3 {
-		t.Fatalf("ClusterRole rules = %d, want 3", len(role.Rules))
-	}
+		expectedName := TestNamespace + "-" + TestEPPName
+		Expect(role.Name).To(Equal(expectedName))
+		Expect(binding.Name).To(Equal(expectedName))
+	})
 
-	hasTokenReviews := false
-	hasSAR := false
-	hasMetrics := false
-	for _, rule := range role.Rules {
-		for _, r := range rule.Resources {
-			if r == "tokenreviews" {
-				hasTokenReviews = true
+	It("should include tokenreviews, subjectaccessreviews, and /metrics rules", func() {
+		role, _ := BuildEPPClusterRBAC(ms, labels)
+
+		Expect(role.Rules).To(HaveLen(3))
+
+		hasTokenReviews := false
+		hasSAR := false
+		hasMetrics := false
+		for _, rule := range role.Rules {
+			for _, r := range rule.Resources {
+				if r == "tokenreviews" {
+					hasTokenReviews = true
+				}
+				if r == "subjectaccessreviews" {
+					hasSAR = true
+				}
 			}
-			if r == "subjectaccessreviews" {
-				hasSAR = true
+			for _, url := range rule.NonResourceURLs {
+				if url == "/metrics" {
+					hasMetrics = true
+				}
 			}
 		}
-		for _, url := range rule.NonResourceURLs {
-			if url == "/metrics" {
-				hasMetrics = true
-			}
-		}
-	}
-	if !hasTokenReviews {
-		t.Error("Missing tokenreviews rule")
-	}
-	if !hasSAR {
-		t.Error("Missing subjectaccessreviews rule")
-	}
-	if !hasMetrics {
-		t.Error("Missing /metrics nonResourceURL rule")
-	}
+		Expect(hasTokenReviews).To(BeTrue(), "Missing tokenreviews rule")
+		Expect(hasSAR).To(BeTrue(), "Missing subjectaccessreviews rule")
+		Expect(hasMetrics).To(BeTrue(), "Missing /metrics nonResourceURL rule")
+	})
 
-	if len(binding.Subjects) != 1 {
-		t.Fatalf("Subjects = %d, want 1", len(binding.Subjects))
-	}
-	if binding.Subjects[0].Name != TestEPPName {
-		t.Errorf("Subject name = %q, want %s", binding.Subjects[0].Name, TestEPPName)
-	}
-	if binding.Subjects[0].Namespace != TestNamespace {
-		t.Errorf("Subject namespace = %q, want %s", binding.Subjects[0].Namespace, TestNamespace)
-	}
-	if binding.RoleRef.Kind != "ClusterRole" {
-		t.Errorf("RoleRef kind = %q, want ClusterRole", binding.RoleRef.Kind)
-	}
-	if binding.RoleRef.Name != expectedName {
-		t.Errorf("RoleRef name = %q, want %q", binding.RoleRef.Name, expectedName)
-	}
-}
+	It("should bind to the EPP ServiceAccount", func() {
+		_, binding := BuildEPPClusterRBAC(ms, labels)
 
-func TestEPPClusterRBACName(t *testing.T) {
-	name := EPPClusterRBACName("my-namespace", "my-model")
-	if name != "my-namespace-my-model-epp" {
-		t.Errorf("EPPClusterRBACName = %q, want my-namespace-my-model-epp", name)
-	}
-}
+		expectedName := TestNamespace + "-" + TestEPPName
+		Expect(binding.Subjects).To(HaveLen(1))
+		Expect(binding.Subjects[0].Name).To(Equal(TestEPPName))
+		Expect(binding.Subjects[0].Namespace).To(Equal(TestNamespace))
+		Expect(binding.RoleRef.Kind).To(Equal("ClusterRole"))
+		Expect(binding.RoleRef.Name).To(Equal(expectedName))
+	})
+})
+
+var _ = Describe("EPPClusterRBACName", func() {
+	It("should embed namespace to avoid collisions", func() {
+		Expect(EPPClusterRBACName("my-namespace", "my-model")).To(Equal("my-namespace-my-model-epp"))
+	})
+})

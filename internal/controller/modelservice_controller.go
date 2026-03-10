@@ -210,7 +210,7 @@ func (r *ModelServiceReconciler) reconcileResources(ctx context.Context, ms *mod
 // handleReconcileError updates the Ready condition and records an event.
 func (r *ModelServiceReconciler) handleReconcileError(ctx context.Context, ms *modelv1alpha1.ModelService, err error) (ctrl.Result, error) {
 	r.setReadyConditionFalse(ctx, ms, "ReconcileError", err.Error())
-	r.Recorder.Eventf(ms, nil, "Warning", "ReconcileError", "Reconcile", err.Error())
+	r.Recorder.Eventf(ms, nil, corev1.EventTypeWarning, "ReconcileError", "Reconcile", err.Error())
 	return ctrl.Result{}, err
 }
 
@@ -278,9 +278,9 @@ func (r *ModelServiceReconciler) updateStatus(ctx context.Context, ms *modelv1al
 
 	switch obs.Phase {
 	case modelv1alpha1.ModelServiceReady:
-		r.Recorder.Eventf(ms, nil, "Normal", "Ready", "Reconcile", "All serving replicas are ready")
+		r.Recorder.Eventf(ms, nil, corev1.EventTypeNormal, "Ready", "Reconcile", "All serving replicas are ready")
 	case modelv1alpha1.ModelServiceFailed:
-		r.Recorder.Eventf(ms, nil, "Warning", "Failed", "Reconcile", obs.Message)
+		r.Recorder.Eventf(ms, nil, corev1.EventTypeWarning, "Failed", "Reconcile", obs.Message)
 	}
 
 	return nil

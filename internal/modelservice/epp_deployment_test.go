@@ -18,7 +18,9 @@ package modelservice
 
 import (
 	"strings"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -47,454 +49,341 @@ func newEPPTestModelService() *modelv1alpha1.ModelService {
 	}
 }
 
-func TestBuildEPPDeployment_Basics(t *testing.T) {
-	ms := newEPPTestModelService()
-	eppConfig := EPPConfig{Provider: ProviderIstio, MetricsEndpointAuth: true}
-	labels := map[string]string{"app": "epp"}
-	selLabels := map[string]string{"selector": "epp"}
+var _ = Describe("BuildEPPDeployment", func() {
+	Context("basics", func() {
+		It("should set name, namespace, and replicas", func() {
+			ms := newEPPTestModelService()
+			eppConfig := EPPConfig{Provider: ProviderIstio, MetricsEndpointAuth: true}
+			labels := map[string]string{"app": "epp"}
+			selLabels := map[string]string{"selector": "epp"}
 
-	dep := BuildEPPDeployment(ms, eppConfig, labels, selLabels, "abc123")
+			dep := BuildEPPDeployment(ms, eppConfig, labels, selLabels, "abc123")
 
-	if dep.Name != TestEPPName {
-		t.Errorf("Name = %q, want %s", dep.Name, TestEPPName)
-	}
-	if dep.Namespace != TestNamespace {
-		t.Errorf("Namespace = %q, want %s", dep.Namespace, TestNamespace)
-	}
-	if *dep.Spec.Replicas != 2 {
-		t.Errorf("Replicas = %d, want 2", *dep.Spec.Replicas)
-	}
-}
+			Expect(dep.Name).To(Equal(TestEPPName))
+			Expect(dep.Namespace).To(Equal(TestNamespace))
+			Expect(*dep.Spec.Replicas).To(Equal(int32(2)))
+		})
+	})
 
-func TestBuildEPPDeployment_RecreateStrategy(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+	Context("deployment strategy", func() {
+		It("should use Recreate strategy", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 
-	if dep.Spec.Strategy.Type != appsv1.RecreateDeploymentStrategyType {
-		t.Errorf("Strategy = %q, want Recreate", dep.Spec.Strategy.Type)
-	}
-}
+			Expect(dep.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
+		})
+	})
 
-func TestBuildEPPDeployment_TerminationGracePeriod(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+	Context("termination grace period", func() {
+		It("should set 130 seconds", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 
-	grace := dep.Spec.Template.Spec.TerminationGracePeriodSeconds
-	if grace == nil || *grace != 130 {
-		t.Errorf("TerminationGracePeriodSeconds = %v, want 130", grace)
-	}
-}
+			grace := dep.Spec.Template.Spec.TerminationGracePeriodSeconds
+			Expect(grace).NotTo(BeNil())
+			Expect(*grace).To(Equal(int64(130)))
+		})
+	})
 
-func TestBuildEPPDeployment_Container(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+	Context("container", func() {
+		It("should configure the EPP container with correct image and ports", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 
-	if len(dep.Spec.Template.Spec.Containers) != 1 {
-		t.Fatalf("Containers = %d, want 1", len(dep.Spec.Template.Spec.Containers))
-	}
+			Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
 
-	c := dep.Spec.Template.Spec.Containers[0]
-	if c.Name != "epp" {
-		t.Errorf("Container name = %q, want epp", c.Name)
-	}
-	if c.Image != "ghcr.io/llm-d/llm-d-inference-scheduler:v0.6.0" {
-		t.Errorf("Image = %q", c.Image)
-	}
+			c := dep.Spec.Template.Spec.Containers[0]
+			Expect(c.Name).To(Equal("epp"))
+			Expect(c.Image).To(Equal("ghcr.io/llm-d/llm-d-inference-scheduler:v0.6.0"))
 
-	hasExtProcPort := false
-	hasMetricsPort := false
-	hasHealthPort := false
-	for _, p := range c.Ports {
-		switch {
-		case p.Name == eppExtProcPortName && p.ContainerPort == 9002:
-			hasExtProcPort = true
-		case p.Name == "http-metrics" && p.ContainerPort == 9090:
-			hasMetricsPort = true
-		case p.Name == "grpc-health" && p.ContainerPort == 9003:
-			hasHealthPort = true
-		}
-	}
-	if !hasExtProcPort {
-		t.Errorf("Missing %s port 9002", eppExtProcPortName)
-	}
-	if !hasMetricsPort {
-		t.Error("Missing http-metrics port 9090")
-	}
-	if !hasHealthPort {
-		t.Error("Missing grpc-health port 9003")
-	}
-}
+			hasExtProcPort := false
+			hasMetricsPort := false
+			hasHealthPort := false
+			for _, p := range c.Ports {
+				switch {
+				case p.Name == eppExtProcPortName && p.ContainerPort == 9002:
+					hasExtProcPort = true
+				case p.Name == "http-metrics" && p.ContainerPort == 9090:
+					hasMetricsPort = true
+				case p.Name == "grpc-health" && p.ContainerPort == 9003:
+					hasHealthPort = true
+				}
+			}
+			Expect(hasExtProcPort).To(BeTrue(), "Missing grpc-ext-proc port 9002")
+			Expect(hasMetricsPort).To(BeTrue(), "Missing http-metrics port 9090")
+			Expect(hasHealthPort).To(BeTrue(), "Missing grpc-health port 9003")
+		})
+	})
 
-func TestBuildEPPDeployment_GRPCProbes(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
-	c := dep.Spec.Template.Spec.Containers[0]
+	Context("gRPC probes", func() {
+		It("should use gRPC health probes on port 9003", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			c := dep.Spec.Template.Spec.Containers[0]
 
-	if c.ReadinessProbe == nil || c.ReadinessProbe.GRPC == nil {
-		t.Fatal("ReadinessProbe should use gRPC")
-	}
-	if c.ReadinessProbe.GRPC.Port != 9003 {
-		t.Errorf("ReadinessProbe gRPC port = %d, want 9003", c.ReadinessProbe.GRPC.Port)
-	}
+			Expect(c.ReadinessProbe).NotTo(BeNil())
+			Expect(c.ReadinessProbe.GRPC).NotTo(BeNil())
+			Expect(c.ReadinessProbe.GRPC.Port).To(Equal(int32(9003)))
 
-	if c.LivenessProbe == nil || c.LivenessProbe.GRPC == nil {
-		t.Fatal("LivenessProbe should use gRPC")
-	}
-	if c.LivenessProbe.GRPC.Port != 9003 {
-		t.Errorf("LivenessProbe gRPC port = %d, want 9003", c.LivenessProbe.GRPC.Port)
-	}
-}
+			Expect(c.LivenessProbe).NotTo(BeNil())
+			Expect(c.LivenessProbe.GRPC).NotTo(BeNil())
+			Expect(c.LivenessProbe.GRPC.Port).To(Equal(int32(9003)))
+		})
 
-func TestBuildEPPDeployment_GRPCProbeService_HA(t *testing.T) {
-	ms := newEPPTestModelService()
-	ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(3))
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
-	c := dep.Spec.Template.Spec.Containers[0]
+		It("should use HA probe services when replicas > 1", func() {
+			ms := newEPPTestModelService()
+			ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(3))
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			c := dep.Spec.Template.Spec.Containers[0]
 
-	if c.ReadinessProbe.GRPC.Service == nil || *c.ReadinessProbe.GRPC.Service != "readiness" {
-		t.Errorf("HA mode readiness probe service = %v, want \"readiness\"", c.ReadinessProbe.GRPC.Service)
-	}
-	if c.LivenessProbe.GRPC.Service == nil || *c.LivenessProbe.GRPC.Service != "liveness" {
-		t.Errorf("HA mode liveness probe service = %v, want \"liveness\"", c.LivenessProbe.GRPC.Service)
-	}
-}
+			Expect(c.ReadinessProbe.GRPC.Service).NotTo(BeNil())
+			Expect(*c.ReadinessProbe.GRPC.Service).To(Equal("readiness"))
+			Expect(c.LivenessProbe.GRPC.Service).NotTo(BeNil())
+			Expect(*c.LivenessProbe.GRPC.Service).To(Equal("liveness"))
+		})
 
-func TestBuildEPPDeployment_GRPCProbeService_Single(t *testing.T) {
-	ms := newEPPTestModelService()
-	ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(1))
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
-	c := dep.Spec.Template.Spec.Containers[0]
+		It("should use single-replica probe service when replicas = 1", func() {
+			ms := newEPPTestModelService()
+			ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(1))
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			c := dep.Spec.Template.Spec.Containers[0]
 
-	if c.ReadinessProbe.GRPC.Service == nil || *c.ReadinessProbe.GRPC.Service != eppSingleReplicaProbeService {
-		t.Errorf("Single-replica readiness probe should have service=%s", eppSingleReplicaProbeService)
-	}
-}
+			Expect(c.ReadinessProbe.GRPC.Service).NotTo(BeNil())
+			Expect(*c.ReadinessProbe.GRPC.Service).To(Equal(eppSingleReplicaProbeService))
+		})
+	})
 
-func TestBuildEPPDeployment_EnvVars(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
-	c := dep.Spec.Template.Spec.Containers[0]
+	Context("environment variables", func() {
+		It("should inject NAMESPACE and POD_NAME from field refs", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			c := dep.Spec.Template.Spec.Containers[0]
 
-	envMap := make(map[string]corev1.EnvVar)
-	for _, e := range c.Env {
-		envMap[e.Name] = e
-	}
+			envMap := make(map[string]corev1.EnvVar)
+			for _, e := range c.Env {
+				envMap[e.Name] = e
+			}
 
-	ns, ok := envMap["NAMESPACE"]
-	if !ok {
-		t.Fatal("Missing NAMESPACE env var")
-	}
-	if ns.ValueFrom == nil || ns.ValueFrom.FieldRef == nil || ns.ValueFrom.FieldRef.FieldPath != "metadata.namespace" {
-		t.Error("NAMESPACE should use fieldRef metadata.namespace")
-	}
+			ns := envMap["NAMESPACE"]
+			Expect(ns.ValueFrom).NotTo(BeNil())
+			Expect(ns.ValueFrom.FieldRef).NotTo(BeNil())
+			Expect(ns.ValueFrom.FieldRef.FieldPath).To(Equal("metadata.namespace"))
 
-	pod, ok := envMap["POD_NAME"]
-	if !ok {
-		t.Fatal("Missing POD_NAME env var")
-	}
-	if pod.ValueFrom == nil || pod.ValueFrom.FieldRef == nil || pod.ValueFrom.FieldRef.FieldPath != "metadata.name" {
-		t.Error("POD_NAME should use fieldRef metadata.name")
-	}
-}
+			pod := envMap["POD_NAME"]
+			Expect(pod.ValueFrom).NotTo(BeNil())
+			Expect(pod.ValueFrom.FieldRef).NotTo(BeNil())
+			Expect(pod.ValueFrom.FieldRef.FieldPath).To(Equal("metadata.name"))
+		})
+	})
 
-func TestBuildEPPDeployment_ArgsKebabCase(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+	Context("command-line arguments", func() {
+		It("should include required kebab-case flags", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			args := dep.Spec.Template.Spec.Containers[0].Args
 
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	hasPoolName := false
-	hasPoolNamespace := false
-	hasConfigFile := false
-	for _, a := range args {
-		switch {
-		case strings.HasPrefix(a, "--pool-name="):
-			hasPoolName = true
-		case strings.HasPrefix(a, "--pool-namespace="):
-			hasPoolNamespace = true
-		case strings.HasPrefix(a, "--config-file=/config/"):
-			hasConfigFile = true
-		}
-	}
-	if !hasPoolName {
-		t.Errorf("Missing --pool-name flag, args: %v", args)
-	}
-	if !hasPoolNamespace {
-		t.Errorf("Missing --pool-namespace flag, args: %v", args)
-	}
-	if !hasConfigFile {
-		t.Errorf("Missing --config-file=/config/ flag, args: %v", args)
-	}
-}
+			hasPoolName := false
+			hasPoolNamespace := false
+			hasConfigFile := false
+			for _, a := range args {
+				switch {
+				case strings.HasPrefix(a, "--pool-name="):
+					hasPoolName = true
+				case strings.HasPrefix(a, "--pool-namespace="):
+					hasPoolNamespace = true
+				case strings.HasPrefix(a, "--config-file=/config/"):
+					hasConfigFile = true
+				}
+			}
+			Expect(hasPoolName).To(BeTrue(), "Missing --pool-name flag")
+			Expect(hasPoolNamespace).To(BeTrue(), "Missing --pool-namespace flag")
+			Expect(hasConfigFile).To(BeTrue(), "Missing --config-file=/config/ flag")
+		})
 
-func TestBuildEPPDeployment_ArgsNonPD(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+		It("should use default-plugins.yaml for non-PD mode", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			args := dep.Spec.Template.Spec.Containers[0].Args
 
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	found := false
-	for _, a := range args {
-		if strings.Contains(a, "config-file=/config/default-plugins.yaml") {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Non-PD deployment should use default-plugins.yaml, args: %v", args)
-	}
-}
+			Expect(args).To(ContainElement(ContainSubstring("config-file=/config/default-plugins.yaml")))
+		})
 
-func TestBuildEPPDeployment_ArgsPD(t *testing.T) {
-	ms := newEPPTestModelService()
-	ms.Spec.Prefill = &modelv1alpha1.RoleSpec{Replicas: new(int32(1))}
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "hash")
+		It("should use pd-config.yaml for PD mode", func() {
+			ms := newEPPTestModelService()
+			ms.Spec.Prefill = &modelv1alpha1.RoleSpec{Replicas: new(int32(1))}
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "hash")
+			args := dep.Spec.Template.Spec.Containers[0].Args
 
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	found := false
-	for _, a := range args {
-		if strings.Contains(a, "config-file=/config/pd-config.yaml") {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("PD deployment should use pd-config.yaml, args: %v", args)
-	}
-}
+			Expect(args).To(ContainElement(ContainSubstring("config-file=/config/pd-config.yaml")))
+		})
 
-func TestBuildEPPDeployment_ZapEncoder(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	found := false
-	for _, a := range args {
-		if a == "--zap-encoder=json" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Should include --zap-encoder=json, args: %v", args)
-	}
-}
+		It("should include --zap-encoder=json", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			args := dep.Spec.Template.Spec.Containers[0].Args
 
-func TestBuildEPPDeployment_LeaderElection(t *testing.T) {
-	ms := newEPPTestModelService()
-	ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(3))
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			Expect(args).To(ContainElement("--zap-encoder=json"))
+		})
 
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	found := false
-	for _, a := range args {
-		if a == "--ha-enable-leader-election" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Replicas > 1 should include --ha-enable-leader-election, args: %v", args)
-	}
-}
+		It("should include --ha-enable-leader-election when replicas > 1", func() {
+			ms := newEPPTestModelService()
+			ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(3))
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			args := dep.Spec.Template.Spec.Containers[0].Args
 
-func TestBuildEPPDeployment_NoLeaderElectionSingleReplica(t *testing.T) {
-	ms := newEPPTestModelService()
-	ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(1))
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			Expect(args).To(ContainElement("--ha-enable-leader-election"))
+		})
 
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	for _, a := range args {
-		if a == "--ha-enable-leader-election" {
-			t.Error("Single replica should not include --ha-enable-leader-election")
-		}
-	}
-}
+		It("should not include --ha-enable-leader-election for single replica", func() {
+			ms := newEPPTestModelService()
+			ms.Spec.InferencePool.EndpointPicker.Replicas = new(int32(1))
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			args := dep.Spec.Template.Spec.Containers[0].Args
 
-func TestBuildEPPDeployment_TracingEnabled(t *testing.T) {
-	ms := newEPPTestModelService()
-	eppConfig := EPPConfig{
-		Tracing: TracingConfig{
-			Enabled:              true,
-			OtelExporterEndpoint: "http://otel:4317",
-			Sampler:              "parentbased_traceidratio",
-			SamplerArg:           "0.5",
-		},
-	}
-	dep := BuildEPPDeployment(ms, eppConfig, nil, nil, "")
-	c := dep.Spec.Template.Spec.Containers[0]
+			Expect(args).NotTo(ContainElement("--ha-enable-leader-election"))
+		})
+	})
 
-	hasTracingFlag := false
-	for _, a := range c.Args {
-		if a == "--tracing=true" {
-			hasTracingFlag = true
-		}
-	}
-	if !hasTracingFlag {
-		t.Errorf("Tracing enabled should include --tracing=true, args: %v", c.Args)
-	}
+	Context("tracing", func() {
+		It("should include tracing args and env when enabled", func() {
+			ms := newEPPTestModelService()
+			eppConfig := EPPConfig{
+				Tracing: TracingConfig{
+					Enabled:              true,
+					OtelExporterEndpoint: "http://otel:4317",
+					Sampler:              "parentbased_traceidratio",
+					SamplerArg:           "0.5",
+				},
+			}
+			dep := BuildEPPDeployment(ms, eppConfig, nil, nil, "")
+			c := dep.Spec.Template.Spec.Containers[0]
 
-	envMap := make(map[string]corev1.EnvVar)
-	for _, e := range c.Env {
-		envMap[e.Name] = e
-	}
-	if envMap["OTEL_EXPORTER_OTLP_ENDPOINT"].Value != "http://otel:4317" {
-		t.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT = %q", envMap["OTEL_EXPORTER_OTLP_ENDPOINT"].Value)
-	}
-	if envMap["OTEL_TRACES_SAMPLER"].Value != "parentbased_traceidratio" {
-		t.Errorf("OTEL_TRACES_SAMPLER = %q", envMap["OTEL_TRACES_SAMPLER"].Value)
-	}
-	if envMap["OTEL_TRACES_SAMPLER_ARG"].Value != "0.5" {
-		t.Errorf("OTEL_TRACES_SAMPLER_ARG = %q", envMap["OTEL_TRACES_SAMPLER_ARG"].Value)
-	}
-}
+			Expect(c.Args).To(ContainElement("--tracing=true"))
 
-func TestBuildEPPDeployment_TracingDisabled(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
-	c := dep.Spec.Template.Spec.Containers[0]
+			envMap := make(map[string]corev1.EnvVar)
+			for _, e := range c.Env {
+				envMap[e.Name] = e
+			}
+			Expect(envMap["OTEL_EXPORTER_OTLP_ENDPOINT"].Value).To(Equal("http://otel:4317"))
+			Expect(envMap["OTEL_TRACES_SAMPLER"].Value).To(Equal("parentbased_traceidratio"))
+			Expect(envMap["OTEL_TRACES_SAMPLER_ARG"].Value).To(Equal("0.5"))
+		})
 
-	hasTracingFalse := false
-	for _, a := range c.Args {
-		if a == "--tracing=false" {
-			hasTracingFalse = true
-		}
-	}
-	if !hasTracingFalse {
-		t.Errorf("Tracing disabled should include --tracing=false, args: %v", c.Args)
-	}
+		It("should include --tracing=false and omit OTEL env when disabled", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			c := dep.Spec.Template.Spec.Containers[0]
 
-	for _, e := range c.Env {
-		if e.Name == "OTEL_EXPORTER_OTLP_ENDPOINT" {
-			t.Error("OTEL env vars should not be set when tracing is disabled")
-		}
-	}
-}
+			Expect(c.Args).To(ContainElement("--tracing=false"))
 
-func TestBuildEPPDeployment_MetricsAuthDisabled(t *testing.T) {
-	ms := newEPPTestModelService()
-	eppConfig := EPPConfig{MetricsEndpointAuth: false}
-	dep := BuildEPPDeployment(ms, eppConfig, nil, nil, "")
+			for _, e := range c.Env {
+				Expect(e.Name).NotTo(Equal("OTEL_EXPORTER_OTLP_ENDPOINT"),
+					"OTEL env vars should not be set when tracing is disabled")
+			}
+		})
+	})
 
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	found := false
-	for _, a := range args {
-		if a == "--metrics-endpoint-auth=false" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("MetricsEndpointAuth=false should include --metrics-endpoint-auth=false, args: %v", args)
-	}
-}
+	Context("metrics endpoint auth", func() {
+		It("should include --metrics-endpoint-auth=false when disabled", func() {
+			ms := newEPPTestModelService()
+			eppConfig := EPPConfig{MetricsEndpointAuth: false}
+			dep := BuildEPPDeployment(ms, eppConfig, nil, nil, "")
+			args := dep.Spec.Template.Spec.Containers[0].Args
 
-func TestBuildEPPDeployment_MetricsAuthEnabled(t *testing.T) {
-	ms := newEPPTestModelService()
-	eppConfig := EPPConfig{MetricsEndpointAuth: true}
-	dep := BuildEPPDeployment(ms, eppConfig, nil, nil, "")
+			Expect(args).To(ContainElement("--metrics-endpoint-auth=false"))
+		})
 
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	for _, a := range args {
-		if strings.Contains(a, "metrics-endpoint-auth") {
-			t.Errorf("MetricsEndpointAuth=true should not include --metrics-endpoint-auth flag, args: %v", args)
-		}
-	}
-}
+		It("should not include --metrics-endpoint-auth flag when enabled", func() {
+			ms := newEPPTestModelService()
+			eppConfig := EPPConfig{MetricsEndpointAuth: true}
+			dep := BuildEPPDeployment(ms, eppConfig, nil, nil, "")
+			args := dep.Spec.Template.Spec.Containers[0].Args
 
-func TestBuildEPPDeployment_CustomFlags(t *testing.T) {
-	ms := newEPPTestModelService()
-	eppConfig := EPPConfig{
-		Flags: map[string]string{
-			"v": "2",
-		},
-	}
+			for _, a := range args {
+				Expect(a).NotTo(ContainSubstring("metrics-endpoint-auth"))
+			}
+		})
+	})
 
-	dep := BuildEPPDeployment(ms, eppConfig, nil, nil, "")
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	found := false
-	for _, a := range args {
-		if a == "--v=2" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Should include custom flag --v=2, args: %v", args)
-	}
-}
+	Context("custom flags", func() {
+		It("should append custom flags from EPPConfig", func() {
+			ms := newEPPTestModelService()
+			eppConfig := EPPConfig{
+				Flags: map[string]string{"v": "2"},
+			}
 
-func TestBuildEPPDeployment_ConfigHashAnnotation(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "deadbeef")
+			dep := BuildEPPDeployment(ms, eppConfig, nil, nil, "")
+			args := dep.Spec.Template.Spec.Containers[0].Args
 
-	ann := dep.Spec.Template.Annotations
-	if ann["checksum/config"] != "deadbeef" {
-		t.Errorf("checksum/config = %q, want deadbeef", ann["checksum/config"])
-	}
-}
+			Expect(args).To(ContainElement("--v=2"))
+		})
+	})
 
-func TestBuildEPPDeployment_NoConfigHash(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+	Context("config hash annotation", func() {
+		It("should set checksum/config annotation when hash is provided", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "deadbeef")
 
-	ann := dep.Spec.Template.Annotations
-	if _, ok := ann["checksum/config"]; ok {
-		t.Error("Empty config hash should not produce annotation")
-	}
-}
+			Expect(dep.Spec.Template.Annotations["checksum/config"]).To(Equal("deadbeef"))
+		})
 
-func TestBuildEPPDeployment_DefaultResources(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
-	c := dep.Spec.Template.Spec.Containers[0]
+		It("should not set checksum/config annotation when hash is empty", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 
-	expectedCPU := resource.MustParse("4")
-	expectedMem := resource.MustParse("8Gi")
-	expectedMemLimit := resource.MustParse("16Gi")
+			Expect(dep.Spec.Template.Annotations).NotTo(HaveKey("checksum/config"))
+		})
+	})
 
-	if !c.Resources.Requests.Cpu().Equal(expectedCPU) {
-		t.Errorf("CPU request = %s, want 4", c.Resources.Requests.Cpu().String())
-	}
-	if !c.Resources.Requests.Memory().Equal(expectedMem) {
-		t.Errorf("Memory request = %s, want 8Gi", c.Resources.Requests.Memory().String())
-	}
-	if !c.Resources.Limits.Memory().Equal(expectedMemLimit) {
-		t.Errorf("Memory limit = %s, want 16Gi", c.Resources.Limits.Memory().String())
-	}
-	if _, ok := c.Resources.Limits[corev1.ResourceCPU]; ok {
-		t.Error("CPU limit should not be set by default (allow bursting)")
-	}
-}
+	Context("resources", func() {
+		It("should use default resources when not specified", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			c := dep.Spec.Template.Spec.Containers[0]
 
-func TestBuildEPPDeployment_CustomResources(t *testing.T) {
-	ms := newEPPTestModelService()
-	ms.Spec.InferencePool.EndpointPicker.Resources = corev1.ResourceRequirements{
-		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("2"),
-			corev1.ResourceMemory: resource.MustParse("4Gi"),
-		},
-	}
+			Expect(c.Resources.Requests.Cpu().Equal(resource.MustParse("4"))).To(BeTrue())
+			Expect(c.Resources.Requests.Memory().Equal(resource.MustParse("8Gi"))).To(BeTrue())
+			Expect(c.Resources.Limits.Memory().Equal(resource.MustParse("16Gi"))).To(BeTrue())
+			Expect(c.Resources.Limits).NotTo(HaveKey(corev1.ResourceCPU), "CPU limit should not be set by default")
+		})
 
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
-	c := dep.Spec.Template.Spec.Containers[0]
+		It("should use custom resources when specified", func() {
+			ms := newEPPTestModelService()
+			ms.Spec.InferencePool.EndpointPicker.Resources = corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("2"),
+					corev1.ResourceMemory: resource.MustParse("4Gi"),
+				},
+			}
 
-	if !c.Resources.Requests.Cpu().Equal(resource.MustParse("2")) {
-		t.Errorf("Custom CPU request = %s, want 2", c.Resources.Requests.Cpu().String())
-	}
-}
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			c := dep.Spec.Template.Spec.Containers[0]
 
-func TestBuildEPPDeployment_ServiceAccount(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			Expect(c.Resources.Requests.Cpu().Equal(resource.MustParse("2"))).To(BeTrue())
+		})
+	})
 
-	if dep.Spec.Template.Spec.ServiceAccountName != TestEPPName {
-		t.Errorf("ServiceAccountName = %q, want %s", dep.Spec.Template.Spec.ServiceAccountName, TestEPPName)
-	}
-}
+	Context("service account", func() {
+		It("should use the EPP service account name", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
 
-func TestBuildEPPDeployment_ConfigMapVolume(t *testing.T) {
-	ms := newEPPTestModelService()
-	dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+			Expect(dep.Spec.Template.Spec.ServiceAccountName).To(Equal(TestEPPName))
+		})
+	})
 
-	found := false
-	for _, v := range dep.Spec.Template.Spec.Volumes {
-		if v.Name == eppConfigVolume && v.ConfigMap != nil && v.ConfigMap.Name == EPPConfigMapName("qwen3") {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("Missing epp-config volume from ConfigMap")
-	}
-}
+	Context("config map volume", func() {
+		It("should mount the EPP config ConfigMap", func() {
+			ms := newEPPTestModelService()
+			dep := BuildEPPDeployment(ms, EPPConfig{}, nil, nil, "")
+
+			found := false
+			for _, v := range dep.Spec.Template.Spec.Volumes {
+				if v.Name == eppConfigVolume && v.ConfigMap != nil && v.ConfigMap.Name == EPPConfigMapName("qwen3") {
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue(), "Missing epp-config volume from ConfigMap")
+		})
+	})
+})

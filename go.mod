@@ -6,7 +6,7 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
-	github.com/otterscale/api v0.8.22
+	github.com/otterscale/api v0.8.23
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.89.0
 	istio.io/api v1.29.0
 	istio.io/client-go v1.29.0

@@ -18,167 +18,139 @@ package modelservice
 
 import (
 	"strings"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
-func TestPluginsConfigFile_NonPD(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: nil,
-		},
-	}
-	if got := PluginsConfigFile(ms); got != DefaultPluginsConfigFile {
-		t.Errorf("PluginsConfigFile = %q, want %q", got, DefaultPluginsConfigFile)
-	}
-}
+var _ = Describe("PluginsConfigFile", func() {
+	It("should return default config for non-PD mode", func() {
+		ms := &modelv1alpha1.ModelService{
+			Spec: modelv1alpha1.ModelServiceSpec{
+				Prefill: nil,
+			},
+		}
+		Expect(PluginsConfigFile(ms)).To(Equal(DefaultPluginsConfigFile))
+	})
 
-func TestPluginsConfigFile_PD(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
-		},
-	}
-	if got := PluginsConfigFile(ms); got != PDPluginsConfigFile {
-		t.Errorf("PluginsConfigFile = %q, want %q", got, PDPluginsConfigFile)
-	}
-}
+	It("should return PD config when prefill is configured", func() {
+		ms := &modelv1alpha1.ModelService{
+			Spec: modelv1alpha1.ModelServiceSpec{
+				Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
+			},
+		}
+		Expect(PluginsConfigFile(ms)).To(Equal(PDPluginsConfigFile))
+	})
+})
 
-func TestBuildEPPConfigMap_NonPD(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: nil,
-		},
-	}
+var _ = Describe("BuildEPPConfigMap", func() {
+	Context("non-PD mode", func() {
+		It("should contain default-plugins.yaml with expected plugins", func() {
+			ms := &modelv1alpha1.ModelService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: modelv1alpha1.ModelServiceSpec{
+					Prefill: nil,
+				},
+			}
 
-	cm := BuildEPPConfigMap(ms, nil)
+			cm := BuildEPPConfigMap(ms, nil)
 
-	if cm.Name != "test-epp-config" {
-		t.Errorf("Name = %q, want test-epp-config", cm.Name)
-	}
+			Expect(cm.Name).To(Equal("test-epp-config"))
 
-	data, ok := cm.Data[DefaultPluginsConfigFile]
-	if !ok {
-		t.Fatal("Non-PD ConfigMap should contain default-plugins.yaml")
-	}
-	if !strings.Contains(data, "EndpointPickerConfig") {
-		t.Error("Default config should contain EndpointPickerConfig")
-	}
-	if !strings.Contains(data, "queue-scorer") {
-		t.Error("Default config should contain queue-scorer plugin")
-	}
-	if !strings.Contains(data, "kv-cache-utilization-scorer") {
-		t.Error("Default config should contain kv-cache-utilization-scorer plugin")
-	}
-	if !strings.Contains(data, "prefix-cache-scorer") {
-		t.Error("Default config should contain prefix-cache-scorer plugin")
-	}
-	if !strings.Contains(data, "metrics-data-source") {
-		t.Error("Default config should contain metrics-data-source plugin")
-	}
-	if !strings.Contains(data, "core-metrics-extractor") {
-		t.Error("Default config should contain core-metrics-extractor plugin")
-	}
-	if !strings.Contains(data, "schedulingProfiles") {
-		t.Error("Default config should contain schedulingProfiles")
-	}
-}
+			data, ok := cm.Data[DefaultPluginsConfigFile]
+			Expect(ok).To(BeTrue(), "Non-PD ConfigMap should contain default-plugins.yaml")
+			Expect(data).To(ContainSubstring("EndpointPickerConfig"))
+			Expect(data).To(ContainSubstring("queue-scorer"))
+			Expect(data).To(ContainSubstring("kv-cache-utilization-scorer"))
+			Expect(data).To(ContainSubstring("prefix-cache-scorer"))
+			Expect(data).To(ContainSubstring("metrics-data-source"))
+			Expect(data).To(ContainSubstring("core-metrics-extractor"))
+			Expect(data).To(ContainSubstring("schedulingProfiles"))
+		})
+	})
 
-func TestBuildEPPConfigMap_PD(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
-		},
-	}
+	Context("PD mode", func() {
+		It("should contain pd-config.yaml with PD-specific plugins", func() {
+			ms := &modelv1alpha1.ModelService{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: modelv1alpha1.ModelServiceSpec{
+					Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
+				},
+			}
 
-	cm := BuildEPPConfigMap(ms, nil)
+			cm := BuildEPPConfigMap(ms, nil)
 
-	data, ok := cm.Data[PDPluginsConfigFile]
-	if !ok {
-		t.Fatal("PD ConfigMap should contain pd-config.yaml")
-	}
-	if !strings.Contains(data, "EndpointPickerConfig") {
-		t.Error("PD config should contain EndpointPickerConfig")
-	}
-	if !strings.Contains(data, "prefill-header-handler") {
-		t.Error("PD config should contain prefill-header-handler plugin")
-	}
-	if !strings.Contains(data, "prefix-cache-scorer") {
-		t.Error("PD config should contain prefix-cache-scorer plugin")
-	}
-	if !strings.Contains(data, "pd-profile-handler") {
-		t.Error("PD config should contain pd-profile-handler plugin")
-	}
-	if !strings.Contains(data, "schedulingProfiles") {
-		t.Error("PD config should contain schedulingProfiles")
-	}
-	if _, hasDefault := cm.Data[DefaultPluginsConfigFile]; hasDefault {
-		t.Error("PD ConfigMap should not contain default-plugins.yaml")
-	}
-}
+			data, ok := cm.Data[PDPluginsConfigFile]
+			Expect(ok).To(BeTrue(), "PD ConfigMap should contain pd-config.yaml")
+			Expect(data).To(ContainSubstring("EndpointPickerConfig"))
+			Expect(data).To(ContainSubstring("prefill-header-handler"))
+			Expect(data).To(ContainSubstring("prefix-cache-scorer"))
+			Expect(data).To(ContainSubstring("pd-profile-handler"))
+			Expect(data).To(ContainSubstring("schedulingProfiles"))
+			Expect(cm.Data).NotTo(HaveKey(DefaultPluginsConfigFile))
+		})
+	})
+})
 
-func TestConfigMapHash_NonPD(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: nil,
-		},
-	}
-	hash := ConfigMapHash(ms)
-	if hash == "" {
-		t.Fatal("Non-PD hash should not be empty (default config is now explicit)")
-	}
-	if len(hash) != 64 {
-		t.Errorf("SHA-256 hex should be 64 chars, got %d", len(hash))
-	}
-}
+var _ = Describe("ConfigMapHash", func() {
+	It("should produce a non-empty 64-char SHA-256 hex for non-PD mode", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: modelv1alpha1.ModelServiceSpec{
+				Prefill: nil,
+			},
+		}
+		hash := ConfigMapHash(ms)
+		Expect(hash).NotTo(BeEmpty())
+		Expect(hash).To(HaveLen(64))
+	})
 
-func TestConfigMapHash_PD(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
-		},
-	}
-	hash := ConfigMapHash(ms)
-	if hash == "" {
-		t.Fatal("PD hash should not be empty")
-	}
-	if len(hash) != 64 {
-		t.Errorf("SHA-256 hex should be 64 chars, got %d", len(hash))
-	}
-}
+	It("should produce a non-empty 64-char SHA-256 hex for PD mode", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: modelv1alpha1.ModelServiceSpec{
+				Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
+			},
+		}
+		hash := ConfigMapHash(ms)
+		Expect(hash).NotTo(BeEmpty())
+		Expect(hash).To(HaveLen(64))
+	})
 
-func TestConfigMapHash_Deterministic(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
-		},
-	}
-	h1 := ConfigMapHash(ms)
-	h2 := ConfigMapHash(ms)
-	if h1 != h2 {
-		t.Error("ConfigMapHash should be deterministic")
-	}
-}
+	It("should be deterministic", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: modelv1alpha1.ModelServiceSpec{
+				Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
+			},
+		}
+		Expect(ConfigMapHash(ms)).To(Equal(ConfigMapHash(ms)))
+	})
 
-func TestConfigMapHash_DiffersBetweenModes(t *testing.T) {
-	msNonPD := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-	}
-	msPD := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec: modelv1alpha1.ModelServiceSpec{
-			Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
-		},
-	}
-	if ConfigMapHash(msNonPD) == ConfigMapHash(msPD) {
-		t.Error("Non-PD and PD hashes should differ")
-	}
-}
+	It("should differ between non-PD and PD modes", func() {
+		msNonPD := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		}
+		msPD := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: modelv1alpha1.ModelServiceSpec{
+				Prefill: &modelv1alpha1.RoleSpec{Replicas: new(int32(1))},
+			},
+		}
+		Expect(ConfigMapHash(msNonPD)).NotTo(Equal(ConfigMapHash(msPD)))
+	})
+})
+
+// Verify that the config YAML content is reasonable by checking key sections.
+var _ = Describe("Config YAML content", func() {
+	It("should have valid default plugins config", func() {
+		Expect(strings.Contains(defaultPluginsConfig, "kind: EndpointPickerConfig")).To(BeTrue())
+	})
+	It("should have valid PD plugins config", func() {
+		Expect(strings.Contains(pdPluginsConfig, "kind: EndpointPickerConfig")).To(BeTrue())
+	})
+})

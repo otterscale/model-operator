@@ -17,7 +17,8 @@ limitations under the License.
 package modelservice
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,39 +26,28 @@ import (
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
-func TestBuildDestinationRule(t *testing.T) {
-	ms := &modelv1alpha1.ModelService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "qwen3",
-			Namespace: TestNamespace,
-		},
-	}
+var _ = Describe("BuildDestinationRule", func() {
+	It("should construct a valid DestinationRule for the EPP Service", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "qwen3",
+				Namespace: TestNamespace,
+			},
+		}
 
-	labels := map[string]string{"component": "epp"}
-	dr := BuildDestinationRule(ms, labels)
+		labels := map[string]string{"component": "epp"}
+		dr := BuildDestinationRule(ms, labels)
 
-	if dr.Name != TestEPPName {
-		t.Errorf("Name = %q, want %s", dr.Name, TestEPPName)
-	}
-	if dr.Namespace != TestNamespace {
-		t.Errorf("Namespace = %q, want %s", dr.Namespace, TestNamespace)
-	}
+		Expect(dr.Name).To(Equal(TestEPPName))
+		Expect(dr.Namespace).To(Equal(TestNamespace))
 
-	expectedHost := TestEPPName + "." + TestNamespace + ".svc.cluster.local"
-	if dr.Spec.Host != expectedHost {
-		t.Errorf("Host = %q, want %q", dr.Spec.Host, expectedHost)
-	}
+		expectedHost := TestEPPName + "." + TestNamespace + ".svc.cluster.local"
+		Expect(dr.Spec.Host).To(Equal(expectedHost))
 
-	if dr.Spec.TrafficPolicy == nil {
-		t.Fatal("TrafficPolicy should not be nil")
-	}
-	if dr.Spec.TrafficPolicy.Tls == nil {
-		t.Fatal("TrafficPolicy.Tls should not be nil")
-	}
-	if dr.Spec.TrafficPolicy.Tls.Mode != networkingv1alpha3.ClientTLSSettings_SIMPLE {
-		t.Errorf("TLS mode = %v, want SIMPLE", dr.Spec.TrafficPolicy.Tls.Mode)
-	}
-	if dr.Spec.TrafficPolicy.Tls.InsecureSkipVerify == nil || !dr.Spec.TrafficPolicy.Tls.InsecureSkipVerify.Value {
-		t.Error("InsecureSkipVerify should be true")
-	}
-}
+		Expect(dr.Spec.TrafficPolicy).NotTo(BeNil())
+		Expect(dr.Spec.TrafficPolicy.Tls).NotTo(BeNil())
+		Expect(dr.Spec.TrafficPolicy.Tls.Mode).To(Equal(networkingv1alpha3.ClientTLSSettings_SIMPLE))
+		Expect(dr.Spec.TrafficPolicy.Tls.InsecureSkipVerify).NotTo(BeNil())
+		Expect(dr.Spec.TrafficPolicy.Tls.InsecureSkipVerify.Value).To(BeTrue())
+	})
+})
