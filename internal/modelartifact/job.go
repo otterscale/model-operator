@@ -49,8 +49,8 @@ kit import "$HF_REPO" \
   --tag model:latest
 
 if [ "$FORMAT" = "ModelPack" ]; then
-  kit unpack -o ${PLAIN_HTTP:+--plain-http} model:latest -d /workspace
-  kit pack . --use-model-pack -t "$OCI_TARGET"
+  kit unpack -o model:latest -d /workspace
+  kit pack /workspace --use-model-pack -t "$OCI_TARGET"
 else
   kit tag model:latest "$OCI_TARGET"
 fi
