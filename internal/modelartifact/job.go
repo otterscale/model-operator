@@ -41,14 +41,14 @@ cd /workspace
 
 kit import "$HF_REPO" \
   ${HF_REVISION:+--ref "$HF_REVISION"} \
-  ${HF_TOKEN:+--token "$HF_TOKEN"}
+  ${HF_TOKEN:+--token "$HF_TOKEN"} \
+  --tag model:latest
 
-import_tag="$HF_REPO:latest"
 if [ "$FORMAT" = "ModelPack" ]; then
-  kit unpack -o ${PLAIN_HTTP:+--plain-http} "$import_tag" -d /workspace
+  kit unpack -o ${PLAIN_HTTP:+--plain-http} model:latest -d /workspace
   kit pack . --use-model-pack -t "$OCI_TARGET"
 else
-  kit tag "$import_tag" "$OCI_TARGET"
+  kit tag model:latest "$OCI_TARGET"
 fi
 
 if [ -n "${OCI_USER:-}" ] && [ -n "${OCI_PASS:-}" ]; then
