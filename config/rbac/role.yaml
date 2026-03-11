@@ -4,6 +4,10 @@ kind: ClusterRole
 metadata:
   name: manager-role
 rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
 - apiGroups:
   - ""
   resources:
@@ -35,6 +39,15 @@ rules:
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - apps
   resources:
@@ -47,6 +60,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
   - batch
   resources:
   - jobs
@@ -57,12 +82,17 @@ rules:
   - list
   - watch
 - apiGroups:
-  - events.k8s.io
+  - coordination.k8s.io
   resources:
-  - events
+  - leases
   verbs:
   - create
+  - delete
+  - get
+  - list
   - patch
+  - update
+  - watch
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
@@ -84,6 +114,15 @@ rules:
   - get
   - list
   - update
+  - watch
+- apiGroups:
+  - inference.networking.x-k8s.io
+  resources:
+  - inferencemodelrewrites
+  - inferenceobjectives
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - model.otterscale.io
