@@ -212,18 +212,23 @@ var _ = Describe("BuildJob", func() {
 		)))
 	})
 
-	It("should inject OCI credentials from secret", func() {
+	It("should mount OCI credentials as docker config volume", func() {
 		job := modelartifact.BuildJob(ma, kitImage, labels)
 		container := job.Spec.Template.Spec.Containers[0]
-		Expect(container.Env).To(ContainElement(SatisfyAll(
-			HaveField("Name", "OCI_USER"),
-			HaveField("ValueFrom.SecretKeyRef.Name", "oci-creds"),
-			HaveField("ValueFrom.SecretKeyRef.Key", "username"),
-		)))
-		Expect(container.Env).To(ContainElement(SatisfyAll(
-			HaveField("Name", "OCI_PASS"),
-			HaveField("ValueFrom.SecretKeyRef.Name", "oci-creds"),
-			HaveField("ValueFrom.SecretKeyRef.Key", "password"),
+		Expect(container.VolumeMounts).To(ContainElement(
+			corev1.VolumeMount{
+				Name:      modelartifact.DockerConfigVolumeName,
+				MountPath: modelartifact.DockerConfigMountPath,
+				ReadOnly:  true,
+			},
+		))
+		volumes := job.Spec.Template.Spec.Volumes
+		Expect(volumes).To(ContainElement(SatisfyAll(
+			HaveField("Name", modelartifact.DockerConfigVolumeName),
+			HaveField("VolumeSource.Secret.SecretName", "oci-creds"),
+			HaveField("VolumeSource.Secret.Items", ConsistOf(
+				corev1.KeyToPath{Key: ".dockerconfigjson", Path: "config.json"},
+			)),
 		)))
 	})
 
@@ -265,11 +270,14 @@ var _ = Describe("BuildJob", func() {
 			}
 		})
 
-		It("should not include OCI credential envs when no secret ref", func() {
+		It("should not mount docker config volume when no secret ref", func() {
 			job := modelartifact.BuildJob(ma, kitImage, nil)
 			container := job.Spec.Template.Spec.Containers[0]
-			for _, e := range container.Env {
-				Expect(e.Name).NotTo(BeElementOf("OCI_USER", "OCI_PASS"))
+			for _, vm := range container.VolumeMounts {
+				Expect(vm.Name).NotTo(Equal(modelartifact.DockerConfigVolumeName))
+			}
+			for _, v := range job.Spec.Template.Spec.Volumes {
+				Expect(v.Name).NotTo(Equal(modelartifact.DockerConfigVolumeName))
 			}
 		})
 
