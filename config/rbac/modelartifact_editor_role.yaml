@@ -12,12 +12,12 @@ metadata:
     app.kubernetes.io/name: model-operator
     app.kubernetes.io/managed-by: kustomize
     rbac.authorization.k8s.io/aggregate-to-edit: "true"
-  name: artifact-editor-role
+  name: modelartifact-editor-role
 rules:
 - apiGroups:
   - model.otterscale.io
   resources:
-  - artifacts
+  - modelartifacts
   verbs:
   - create
   - delete
@@ -29,6 +29,6 @@ rules:
 - apiGroups:
   - model.otterscale.io
   resources:
-  - artifacts/status
+  - modelartifacts/status
   verbs:
   - get
