@@ -33,6 +33,10 @@ import (
 // - ModelKit: import tags as OCI_TARGET directly, skip pack, push.
 // - ModelPack: import creates ModelKit, unpack to /workspace, repack with --use-model-pack.
 //
+// Registry authentication is handled by mounting a kubernetes.io/dockerconfigjson
+// Secret at /.docker/config.json. kit (and the underlying OCI libraries) read
+// this file automatically, so no explicit "kit login" step is required.
+//
 // SECURITY: Env vars (HF_REPO, HF_REVISION, OCI_TARGET, etc.) come from the Artifact CR.
 // The CRD schema validates Model, Revision, Registry, Repository, and Tag with Pattern restrictions
 // to prevent shell injection. Only users who can create Artifacts have access.
@@ -49,10 +53,6 @@ if [ "$FORMAT" = "ModelPack" ]; then
   kit pack . --use-model-pack -t "$OCI_TARGET"
 else
   kit tag model:latest "$OCI_TARGET"
-fi
-
-if [ -n "${OCI_USER:-}" ] && [ -n "${OCI_PASS:-}" ]; then
-  kit login "$(echo "$OCI_TARGET" | cut -d'/' -f1)" -u "$OCI_USER" -p "$OCI_PASS"
 fi
 
 output=$(kit push ${PLAIN_HTTP:+--plain-http} "$OCI_TARGET" 2>&1)
@@ -94,9 +94,51 @@ func BuildPVC(artifact *modelv1alpha1.ModelArtifact, labels map[string]string) *
 //   - GenerateName avoids name collisions when the Artifact spec changes
 //   - backoffLimit=0 prevents the Job from retrying on its own; the controller handles retries
 //   - terminationMessagePath writes the OCI digest for the controller to read
-//   - Secrets are injected via env valueFrom, never passing through the controller
+//   - HuggingFace tokens are injected via env valueFrom, never passing through the controller
+//   - OCI registry credentials (kubernetes.io/dockerconfigjson) are mounted at /.docker/config.json
+//     so that kit push authenticates transparently without an explicit login step
 func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map[string]string) *batchv1.Job {
 	env := buildEnvVars(artifact)
+
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      WorkspaceVolumeName,
+			MountPath: WorkspaceMountPath,
+		},
+	}
+
+	volumes := []corev1.Volume{
+		{
+			Name: WorkspaceVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: PVCName(artifact.Name),
+				},
+			},
+		},
+	}
+
+	if cred := artifact.Spec.Target.CredentialsSecretRef; cred != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      DockerConfigVolumeName,
+			MountPath: DockerConfigMountPath,
+			ReadOnly:  true,
+		})
+		volumes = append(volumes, corev1.Volume{
+			Name: DockerConfigVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cred.Name,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  ".dockerconfigjson",
+							Path: "config.json",
+						},
+					},
+				},
+			},
+		})
+	}
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -133,12 +175,7 @@ func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map
 									Drop: []corev1.Capability{"ALL"},
 								},
 							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      WorkspaceVolumeName,
-									MountPath: WorkspaceMountPath,
-								},
-							},
+							VolumeMounts:             volumeMounts,
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 							Resources: corev1.ResourceRequirements{
@@ -149,16 +186,7 @@ func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map
 							},
 						},
 					},
-					Volumes: []corev1.Volume{
-						{
-							Name: WorkspaceVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: PVCName(artifact.Name),
-								},
-							},
-						},
-					},
+					Volumes: volumes,
 				},
 			},
 		},
@@ -180,6 +208,7 @@ func buildEnvVars(artifact *modelv1alpha1.ModelArtifact) []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "OCI_TARGET", Value: OCIReference(artifact)},
 		{Name: "FORMAT", Value: string(artifact.Spec.Format)},
+		{Name: "DOCKER_CONFIG", Value: DockerConfigMountPath},
 	}
 
 	if artifact.Spec.Target.Insecure {
@@ -206,29 +235,6 @@ func buildEnvVars(artifact *modelv1alpha1.ModelArtifact) []corev1.EnvVar {
 				},
 			})
 		}
-	}
-
-	if cred := artifact.Spec.Target.CredentialsSecretRef; cred != nil {
-		envs = append(envs,
-			corev1.EnvVar{
-				Name: "OCI_USER",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: cred.Name},
-						Key:                  "username",
-					},
-				},
-			},
-			corev1.EnvVar{
-				Name: "OCI_PASS",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: cred.Name},
-						Key:                  "password",
-					},
-				},
-			},
-		)
 	}
 
 	return envs

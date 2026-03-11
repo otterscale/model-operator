@@ -37,6 +37,12 @@ const (
 	// PVCSuffix is appended to the Artifact name to form the PVC name.
 	PVCSuffix = "-workspace"
 
+	// DockerConfigVolumeName is the name of the volume that mounts OCI registry credentials.
+	DockerConfigVolumeName = "docker-config"
+
+	// DockerConfigMountPath is the mount path for the Docker config inside the Job Pod.
+	DockerConfigMountPath = "/.docker"
+
 	// DefaultJobTTLSeconds is the time after Job completion (succeeded or failed)
 	// before Kubernetes automatically deletes it. Allows users to view logs via kubectl
 	// before cleanup; after deletion, the PVC can be released.
