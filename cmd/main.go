@@ -213,6 +213,7 @@ func main() {
 				SamplerArg:           tracingSamplerArg,
 			},
 		},
+		KitImage: kitImage,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "ModelService")
 		os.Exit(1)

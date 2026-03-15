@@ -33,8 +33,15 @@ const (
 
 	ModelVolumeName = "model"
 
+	// DockerConfigVolumeName is the name of the volume that mounts OCI registry credentials
+	// (when spec.model.imagePullSecrets is set). Aligned with modelartifact for consistency.
+	DockerConfigVolumeName = "docker-config"
+	// DockerConfigMountPath is the mount path for the Docker config inside the Pod (config at config.json).
+	DockerConfigMountPath = "/.docker"
+
 	LabelRole            = "llm-d.ai/role"
 	LabelInferenceServer = "llm-d.ai/inference-serving"
+	LabelModel           = "llm-d.ai/model"
 
 	LabelValueTrue = "true"
 
@@ -159,10 +166,13 @@ func LabelsForRole(msName, component, version string) map[string]string {
 	return m
 }
 
-// PodLabelsForRole returns labels applied to serving pods, including the llm-d role.
+// PodLabelsForRole returns labels applied to serving pods, including the llm-d role
+// and llm-d.ai/model (ModelService name). Only the Deployment's Pod template gets
+// llm-d.ai/model; the Deployment object itself does not.
 func PodLabelsForRole(msName, component, version, role string) map[string]string {
 	m := LabelsForRole(msName, component, version)
 	m[LabelRole] = role
+	m[LabelModel] = msName
 	return m
 }
 

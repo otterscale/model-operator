@@ -49,8 +49,9 @@ func EnsureDecodeDeployment(
 	ms *modelv1alpha1.ModelService,
 	version string,
 	tracing TracingConfig,
+	kitImage string,
 ) error {
-	return ensureDeployment(ctx, c, scheme, ms, &ms.Spec.Decode, RoleDecode, DecodeName(ms.Name), ComponentDecode, version, tracing)
+	return ensureDeployment(ctx, c, scheme, ms, &ms.Spec.Decode, RoleDecode, DecodeName(ms.Name), ComponentDecode, version, tracing, kitImage)
 }
 
 // EnsurePrefillDeployment creates or updates the prefill Deployment if configured.
@@ -61,11 +62,12 @@ func EnsurePrefillDeployment(
 	ms *modelv1alpha1.ModelService,
 	version string,
 	tracing TracingConfig,
+	kitImage string,
 ) error {
 	if ms.Spec.Prefill == nil {
 		return cleanupDeployment(ctx, c, ms.Namespace, PrefillName(ms.Name))
 	}
-	return ensureDeployment(ctx, c, scheme, ms, ms.Spec.Prefill, RolePrefill, PrefillName(ms.Name), ComponentPrefill, version, tracing)
+	return ensureDeployment(ctx, c, scheme, ms, ms.Spec.Prefill, RolePrefill, PrefillName(ms.Name), ComponentPrefill, version, tracing, kitImage)
 }
 
 func ensureDeployment(
@@ -79,12 +81,13 @@ func ensureDeployment(
 	component string,
 	version string,
 	tracing TracingConfig,
+	kitImage string,
 ) error {
 	selectorLabels := SelectorLabelsForRole(ms.Name, component)
 	metadataLabels := LabelsForRole(ms.Name, component, version)
 	podLabels := PodLabelsForRole(ms.Name, component, version, roleName)
 
-	desired := BuildDeployment(ms, role, roleName, deployName, podLabels, metadataLabels, selectorLabels, tracing)
+	desired := BuildDeployment(ms, role, roleName, deployName, podLabels, metadataLabels, selectorLabels, tracing, kitImage)
 	if err := ctrlutil.SetControllerReference(ms, desired, scheme); err != nil {
 		return fmt.Errorf("setting Deployment owner reference: %w", err)
 	}

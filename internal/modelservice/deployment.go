@@ -26,13 +26,23 @@ import (
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
-const defaultMountPath = "/models"
+const (
+	defaultMountPath = "/models"
+
+	// ModelTmpVolumeName is the name of the emptyDir volume used by the model-unpack
+	// init container for OCI pull cache (kit cache / scratch).
+	ModelTmpVolumeName = "model-tmp"
+	// ModelTmpMountPath is the mount path for the OCI cache inside the init container.
+	// KITOPS_HOME is set to this path so kit stores its cache here.
+	ModelTmpMountPath = "/tmp/model-oci"
+)
 
 // BuildDeployment constructs an apps/v1 Deployment for a serving role (decode or prefill).
 //
-// The Deployment uses a Kubernetes image volume (K8s >= 1.35) to mount the OCI
-// model artifact directly — no init containers or PVC provisioning required.
-// GPU resources are injected automatically based on accelerator type and parallelism.
+// The model artifact is provisioned by an init container that pulls the OCI ModelPack
+// from spec.model.image into a tmp emptyDir and runs "kit unpack" into spec.model.mountPath.
+// The main vLLM container mounts the unpacked model read-only. GPU resources are
+// injected automatically based on accelerator type and parallelism.
 func BuildDeployment(
 	ms *modelv1alpha1.ModelService,
 	role *modelv1alpha1.RoleSpec,
@@ -42,12 +52,13 @@ func BuildDeployment(
 	metadataLabels map[string]string,
 	selectorLabels map[string]string,
 	tracing TracingConfig,
+	kitImage string,
 ) *appsv1.Deployment {
 	replicas := DefaultReplicas(role.Replicas)
 
 	isDecodeRole := roleName == RoleDecode
 	vllmContainer := buildVLLMContainer(ms, role, isDecodeRole)
-	initContainers := buildInitContainers(ms, isDecodeRole, tracing)
+	initContainers := buildInitContainers(ms, isDecodeRole, tracing, kitImage)
 	volumes := buildVolumes(ms)
 
 	dep := &appsv1.Deployment{
@@ -202,12 +213,25 @@ func buildVLLMEnv(
 	return envs
 }
 
-// buildInitContainers constructs init containers. The routing proxy sidecar is
-// only injected for decode pods — prefill pods receive requests directly from
-// the routing proxy running on decode pods, so they don't need their own proxy.
-func buildInitContainers(ms *modelv1alpha1.ModelService, isDecodeRole bool, tracing TracingConfig) []corev1.Container {
+// buildInitContainers constructs init containers. The first init container (model-unpack)
+// pulls the OCI ModelPack from spec.model.image to a tmp emptyDir and unpacks to
+// spec.model.mountPath using kit. The routing proxy sidecar is only injected for
+// decode pods — prefill pods receive requests directly from the routing proxy on
+// decode pods, so they don't need their own proxy.
+func buildInitContainers(ms *modelv1alpha1.ModelService, isDecodeRole bool, tracing TracingConfig, kitImage string) []corev1.Container {
+	mountPath := ms.Spec.Model.MountPath
+	if mountPath == "" {
+		mountPath = defaultMountPath
+	}
+
+	modelUnpack := buildModelUnpackInitContainer(ms, mountPath, kitImage)
+	var inits []corev1.Container
+	if modelUnpack != nil {
+		inits = append(inits, *modelUnpack)
+	}
+
 	if !isDecodeRole || ms.Spec.RoutingProxy == nil {
-		return nil
+		return inits
 	}
 
 	proxy := ms.Spec.RoutingProxy
@@ -251,45 +275,115 @@ func buildInitContainers(ms *modelv1alpha1.ModelService, isDecodeRole bool, trac
 		}
 	}
 
-	return []corev1.Container{
-		{
-			Name:  "routing-proxy",
-			Image: proxy.Image,
-			Args:  args,
-			Env:   env,
-			Ports: []corev1.ContainerPort{
-				{
-					Name:          "proxy",
-					ContainerPort: port,
-					Protocol:      corev1.ProtocolTCP,
-				},
+	return append(inits, corev1.Container{
+		Name:  "routing-proxy",
+		Image: proxy.Image,
+		Args:  args,
+		Env:   env,
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "proxy",
+				ContainerPort: port,
+				Protocol:      corev1.ProtocolTCP,
 			},
-			RestartPolicy: &always,
-			SecurityContext: &corev1.SecurityContext{
-				AllowPrivilegeEscalation: new(false),
-				Capabilities: &corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-				},
+		},
+		RestartPolicy: &always,
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: new(false),
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		},
+	})
+}
+
+// modelUnpackScript runs in the model-unpack init container: set KITOPS_HOME to the
+// tmp emptyDir, then kit unpack the OCI ModelPack from spec.model.image to the
+// model mount path. --plain-http allows connecting to registries over HTTP (e.g. Harbor without TLS).
+// Registry auth uses DOCKER_CONFIG when imagePullSecrets are set.
+const modelUnpackScript = `set -euo pipefail
+export KITOPS_HOME="${KITOPS_HOME:-/tmp/model-oci}"
+mkdir -p "$KITOPS_HOME"
+kit unpack "$OCI_MODEL_IMAGE" --plain-http -o -d "$MODEL_MOUNT_PATH"
+`
+
+// buildModelUnpackInitContainer returns the init container that pulls the OCI ModelPack
+// from spec.model.image into the tmp emptyDir and unpacks to mountPath using kit.
+// Returns nil if kitImage or ms.Spec.Model.Image is empty.
+func buildModelUnpackInitContainer(ms *modelv1alpha1.ModelService, mountPath, kitImage string) *corev1.Container {
+	if kitImage == "" || ms.Spec.Model.Image == "" {
+		return nil
+	}
+
+	volumeMounts := []corev1.VolumeMount{
+		{Name: ModelTmpVolumeName, MountPath: ModelTmpMountPath},
+		{Name: ModelVolumeName, MountPath: mountPath},
+	}
+	env := []corev1.EnvVar{
+		{Name: "OCI_MODEL_IMAGE", Value: ms.Spec.Model.Image},
+		{Name: "MODEL_MOUNT_PATH", Value: mountPath},
+		{Name: "KITOPS_HOME", Value: ModelTmpMountPath},
+	}
+
+	if len(ms.Spec.Model.ImagePullSecrets) > 0 {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      DockerConfigVolumeName,
+			MountPath: DockerConfigMountPath,
+			ReadOnly:  true,
+		})
+		env = append(env, corev1.EnvVar{Name: "DOCKER_CONFIG", Value: DockerConfigMountPath})
+	}
+
+	c := &corev1.Container{
+		Name:         "model-unpack",
+		Image:        kitImage,
+		Command:      []string{"/bin/sh", "-c"},
+		Args:         []string{modelUnpackScript},
+		Env:          env,
+		VolumeMounts: volumeMounts,
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: new(false),
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
 			},
 		},
 	}
+	return c
 }
 
-// buildVolumes constructs the volume list. The model artifact is mounted via
-// a Kubernetes image volume — the kubelet pulls the OCI image and exposes it
-// as a read-only filesystem, leveraging the node's container image cache.
+// buildVolumes constructs the volume list. The model artifact is provisioned by the
+// model-unpack init container: model-tmp is an emptyDir for OCI pull cache (kit cache),
+// and model is an emptyDir that receives the unpacked content at spec.model.mountPath.
+// When spec.model.imagePullSecrets is set, the first secret is mounted for registry auth.
 func buildVolumes(ms *modelv1alpha1.ModelService) []corev1.Volume {
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: ModelVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				Image: &corev1.ImageVolumeSource{
-					Reference:  ms.Spec.Model.Image,
-					PullPolicy: corev1.PullIfNotPresent,
-				},
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: ModelTmpVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 	}
+	if len(ms.Spec.Model.ImagePullSecrets) > 0 {
+		volumes = append(volumes, corev1.Volume{
+			Name: DockerConfigVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: ms.Spec.Model.ImagePullSecrets[0].Name,
+					Items: []corev1.KeyToPath{
+						{Key: ".dockerconfigjson", Path: "config.json"},
+					},
+				},
+			},
+		})
+	}
+	return volumes
 }
 
 func enginePort(ms *modelv1alpha1.ModelService) int32 {

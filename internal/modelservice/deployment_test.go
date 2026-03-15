@@ -29,6 +29,7 @@ import (
 )
 
 const testMountPath = "/models"
+const testKitImage = "ghcr.io/kitops-ml/kitops:v1.11.0"
 
 func newTestModelService() *modelv1alpha1.ModelService {
 	replicas := int32(2)
@@ -68,7 +69,7 @@ var _ = Describe("BuildDeployment", func() {
 		metaLabels := map[string]string{"app": "qwen3"}
 		selLabels := map[string]string{"app": "qwen3"}
 
-		dep := BuildDeployment(ms, role, RoleDecode, "qwen3-32b-decode", podLabels, metaLabels, selLabels, TracingConfig{})
+		dep := BuildDeployment(ms, role, RoleDecode, "qwen3-32b-decode", podLabels, metaLabels, selLabels, TracingConfig{}, testKitImage)
 
 		Expect(dep.Name).To(Equal("qwen3-32b-decode"))
 		Expect(dep.Namespace).To(Equal(TestNamespace))
@@ -86,22 +87,40 @@ var _ = Describe("BuildDeployment", func() {
 		Expect(gpuRes.Value()).To(Equal(int64(4)))
 	})
 
-	It("should mount the model as an image volume", func() {
+	It("should provision model via init container and emptyDir volumes", func() {
 		ms := newTestModelService()
 		role := &ms.Spec.Decode
-		dep := BuildDeployment(ms, role, RoleDecode, "test-decode", nil, nil, nil, TracingConfig{})
+		dep := BuildDeployment(ms, role, RoleDecode, "test-decode", nil, nil, nil, TracingConfig{}, testKitImage)
 
 		volumes := dep.Spec.Template.Spec.Volumes
-		Expect(volumes).To(HaveLen(1))
+		Expect(volumes).NotTo(BeEmpty())
+		var modelVol *corev1.Volume
+		var modelTmpVol *corev1.Volume
+		for i := range volumes {
+			v := &volumes[i]
+			if v.Name == ModelVolumeName {
+				modelVol = v
+			}
+			if v.Name == ModelTmpVolumeName {
+				modelTmpVol = v
+			}
+		}
+		Expect(modelVol).NotTo(BeNil())
+		Expect(modelVol.EmptyDir).NotTo(BeNil())
+		Expect(modelTmpVol).NotTo(BeNil())
+		Expect(modelTmpVol.EmptyDir).NotTo(BeNil())
 
-		v := volumes[0]
-		Expect(v.Name).To(Equal(ModelVolumeName))
-		Expect(v.Image).NotTo(BeNil())
-		Expect(v.Image.Reference).To(Equal("registry.example.com/models/qwen3-32b:v1"))
-		Expect(v.Image.PullPolicy).To(Equal(corev1.PullIfNotPresent))
+		initContainers := dep.Spec.Template.Spec.InitContainers
+		Expect(initContainers).NotTo(BeEmpty())
+		unpack := initContainers[0]
+		Expect(unpack.Name).To(Equal("model-unpack"))
+		Expect(unpack.Image).To(Equal(testKitImage))
+		Expect(unpack.Args).NotTo(BeEmpty())
+		Expect(unpack.Args[0]).To(ContainSubstring("kit unpack"))
 
 		vllm := dep.Spec.Template.Spec.Containers[0]
 		Expect(vllm.VolumeMounts).To(HaveLen(1))
+		Expect(vllm.VolumeMounts[0].Name).To(Equal(ModelVolumeName))
 		Expect(vllm.VolumeMounts[0].MountPath).To(Equal(testMountPath))
 		Expect(vllm.VolumeMounts[0].ReadOnly).To(BeTrue())
 	})
@@ -113,12 +132,12 @@ var _ = Describe("BuildDeployment", func() {
 			TargetPort: 8200,
 		}
 		role := &ms.Spec.Decode
-		dep := BuildDeployment(ms, role, RoleDecode, "test-decode", nil, nil, nil, TracingConfig{})
+		dep := BuildDeployment(ms, role, RoleDecode, "test-decode", nil, nil, nil, TracingConfig{}, testKitImage)
 
 		initContainers := dep.Spec.Template.Spec.InitContainers
-		Expect(initContainers).To(HaveLen(1))
-
-		proxy := initContainers[0]
+		Expect(initContainers).To(HaveLen(2))
+		Expect(initContainers[0].Name).To(Equal("model-unpack"))
+		proxy := initContainers[1]
 		Expect(proxy.Name).To(Equal("routing-proxy"))
 		Expect(proxy.RestartPolicy).NotTo(BeNil())
 		Expect(*proxy.RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
@@ -141,9 +160,10 @@ var _ = Describe("BuildDeployment", func() {
 			TargetPort: 8200,
 		}
 		role := &ms.Spec.Decode
-		dep := BuildDeployment(ms, role, RolePrefill, "test-prefill", nil, nil, nil, TracingConfig{})
+		dep := BuildDeployment(ms, role, RolePrefill, "test-prefill", nil, nil, nil, TracingConfig{}, testKitImage)
 
-		Expect(dep.Spec.Template.Spec.InitContainers).To(BeEmpty())
+		Expect(dep.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		Expect(dep.Spec.Template.Spec.InitContainers[0].Name).To(Equal("model-unpack"))
 
 		vllm := dep.Spec.Template.Spec.Containers[0]
 		for _, p := range vllm.Ports {
@@ -154,7 +174,7 @@ var _ = Describe("BuildDeployment", func() {
 	It("should set security context correctly", func() {
 		ms := newTestModelService()
 		role := &ms.Spec.Decode
-		dep := BuildDeployment(ms, role, RoleDecode, "test", nil, nil, nil, TracingConfig{})
+		dep := BuildDeployment(ms, role, RoleDecode, "test", nil, nil, nil, TracingConfig{}, testKitImage)
 
 		podSec := dep.Spec.Template.Spec.SecurityContext
 		Expect(podSec).NotTo(BeNil())
@@ -169,12 +189,51 @@ var _ = Describe("BuildDeployment", func() {
 		ms := newTestModelService()
 		ms.Spec.Accelerator.Type = modelv1alpha1.AcceleratorCPU
 		role := &ms.Spec.Decode
-		dep := BuildDeployment(ms, role, RoleDecode, "test", nil, nil, nil, TracingConfig{})
+		dep := BuildDeployment(ms, role, RoleDecode, "test", nil, nil, nil, TracingConfig{}, testKitImage)
 
 		vllm := dep.Spec.Template.Spec.Containers[0]
 		for k := range vllm.Resources.Limits {
 			Expect(k).NotTo(BeElementOf(corev1.ResourceName("nvidia.com/gpu"), corev1.ResourceName("amd.com/gpu")),
 				"CPU mode should not have GPU resources")
 		}
+	})
+
+	It("should add docker config volume and env when imagePullSecrets are set", func() {
+		ms := newTestModelService()
+		ms.Spec.Model.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "my-registry-secret"}}
+		role := &ms.Spec.Decode
+		dep := BuildDeployment(ms, role, RoleDecode, "test", nil, nil, nil, TracingConfig{}, testKitImage)
+
+		var dockerVol *corev1.Volume
+		for i := range dep.Spec.Template.Spec.Volumes {
+			v := &dep.Spec.Template.Spec.Volumes[i]
+			if v.Name == DockerConfigVolumeName {
+				dockerVol = v
+				break
+			}
+		}
+		Expect(dockerVol).NotTo(BeNil())
+		Expect(dockerVol.Secret).NotTo(BeNil())
+		Expect(dockerVol.Secret.SecretName).To(Equal("my-registry-secret"))
+
+		unpack := dep.Spec.Template.Spec.InitContainers[0]
+		Expect(unpack.Name).To(Equal("model-unpack"))
+		var dockerMount bool
+		var dockerEnv bool
+		for _, m := range unpack.VolumeMounts {
+			if m.Name == DockerConfigVolumeName {
+				dockerMount = true
+				Expect(m.MountPath).To(Equal(DockerConfigMountPath))
+				break
+			}
+		}
+		for _, e := range unpack.Env {
+			if e.Name == "DOCKER_CONFIG" && e.Value == DockerConfigMountPath {
+				dockerEnv = true
+				break
+			}
+		}
+		Expect(dockerMount).To(BeTrue())
+		Expect(dockerEnv).To(BeTrue())
 	})
 })

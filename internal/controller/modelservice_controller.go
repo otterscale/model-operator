@@ -56,6 +56,7 @@ type ModelServiceReconciler struct {
 	Version   string
 	Recorder  events.EventRecorder
 	EPPConfig modelservice.EPPConfig
+	KitImage  string
 }
 
 // RBAC Permissions required by the controller:
@@ -149,10 +150,10 @@ func (r *ModelServiceReconciler) handleDeletion(ctx context.Context, ms *modelv1
 // and the InferencePool/HTTPRoute reference the EPP Service.
 func (r *ModelServiceReconciler) reconcileResources(ctx context.Context, ms *modelv1alpha1.ModelService) error {
 	// 1. Serving Deployments
-	if err := modelservice.EnsureDecodeDeployment(ctx, r.Client, r.Scheme, ms, r.Version, r.EPPConfig.Tracing); err != nil {
+	if err := modelservice.EnsureDecodeDeployment(ctx, r.Client, r.Scheme, ms, r.Version, r.EPPConfig.Tracing, r.KitImage); err != nil {
 		return err
 	}
-	if err := modelservice.EnsurePrefillDeployment(ctx, r.Client, r.Scheme, ms, r.Version, r.EPPConfig.Tracing); err != nil {
+	if err := modelservice.EnsurePrefillDeployment(ctx, r.Client, r.Scheme, ms, r.Version, r.EPPConfig.Tracing, r.KitImage); err != nil {
 		return err
 	}
 
