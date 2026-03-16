@@ -195,7 +195,7 @@ func (r *ModelServiceReconciler) reconcileResources(ctx context.Context, ms *mod
 	if err := modelservice.EnsureInferencePool(ctx, r.Client, r.Scheme, ms, r.Version); err != nil {
 		return err
 	}
-	if err := modelservice.EnsureHTTPRoute(ctx, r.Client, r.Scheme, ms, r.Version); err != nil {
+	if err := modelservice.EnsureHTTPRoute(ctx, r.Client, r.Scheme, ms, r.Version, r.EPPConfig); err != nil {
 		return err
 	}
 

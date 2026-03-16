@@ -105,6 +105,9 @@ func main() {
 		"OpenTelemetry traces sampler for EPP.")
 	flag.StringVar(&tracingSamplerArg, "tracing-sampler-arg", "0.01",
 		"Argument passed to the OpenTelemetry traces sampler.")
+	var defaultGatewayName string
+	flag.StringVar(&defaultGatewayName, "default-gateway-name", "llm-d-infra-inference-gateway",
+		"Gateway name for default HTTPRoute parentRef when spec.httpRoute is not set. Set to empty to disable creating HTTPRoute by default.")
 	opts := zap.Options{
 		Development: false,
 	}
@@ -206,6 +209,7 @@ func main() {
 		EPPConfig: modelservice.EPPConfig{
 			Provider:            provider,
 			MetricsEndpointAuth: metricsEndpointAuth,
+			DefaultGatewayName:  defaultGatewayName,
 			Tracing: modelservice.TracingConfig{
 				Enabled:              tracingEnabled,
 				OtelExporterEndpoint: tracingOtelEndpoint,

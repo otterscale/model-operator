@@ -23,6 +23,58 @@ import (
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
+// BuildDefaultHTTPRoute constructs an HTTPRoute when spec.httpRoute is not set.
+// It attaches to the given gateway and routes to the InferencePool named poolName
+// (EPPName(ms.Name) for default pool, or InferencePoolName(ms.Name) for explicit).
+// DefaultGatewayGroup is the API group for Gateway parentRef in HTTPRoute.
+const DefaultGatewayGroup = "gateway.networking.k8s.io"
+
+// DefaultGatewayKind is the kind for Gateway parentRef in HTTPRoute.
+const DefaultGatewayKind = "Gateway"
+
+func BuildDefaultHTTPRoute(
+	ms *modelv1alpha1.ModelService,
+	metadataLabels map[string]string,
+	gatewayName string,
+	poolName string,
+) *gatewayv1.HTTPRoute {
+	group := gatewayv1.Group(DefaultGatewayGroup)
+	kind := gatewayv1.Kind(DefaultGatewayKind)
+	parentRef := gatewayv1.ParentReference{
+		Group: &group,
+		Kind:  &kind,
+		Name:  gatewayv1.ObjectName(gatewayName),
+	}
+	backendGroup := gatewayv1.Group("inference.networking.k8s.io")
+	backendKind := gatewayv1.Kind("InferencePool")
+	rule := gatewayv1.HTTPRouteRule{
+		BackendRefs: []gatewayv1.HTTPBackendRef{
+			{
+				BackendRef: gatewayv1.BackendRef{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Group: &backendGroup,
+						Kind:  &backendKind,
+						Name:  gatewayv1.ObjectName(poolName),
+					},
+				},
+			},
+		},
+	}
+	return &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      HTTPRouteName(ms.Name),
+			Namespace: ms.Namespace,
+			Labels:    metadataLabels,
+		},
+		Spec: gatewayv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{parentRef},
+			},
+			Rules: []gatewayv1.HTTPRouteRule{rule},
+		},
+	}
+}
+
 // BuildHTTPRoute constructs a typed HTTPRoute that routes traffic
 // from a Gateway to the InferencePool backend.
 //

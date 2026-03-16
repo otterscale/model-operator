@@ -39,6 +39,12 @@ type EPPConfig struct {
 	// authentication. When false, --metrics-endpoint-auth=false is passed.
 	MetricsEndpointAuth bool
 
+	// DefaultGatewayName is the Gateway name used when creating an HTTPRoute
+	// and spec.httpRoute is not set. When non-empty, a default HTTPRoute is
+	// created (parentRef to this gateway, backend to the InferencePool).
+	// When empty, HTTPRoute is only created when spec.httpRoute is set.
+	DefaultGatewayName string
+
 	// Tracing holds OpenTelemetry tracing configuration.
 	Tracing TracingConfig
 }

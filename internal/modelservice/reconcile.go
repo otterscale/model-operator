@@ -165,25 +165,38 @@ func EnsureInferencePool(
 	})
 }
 
-// EnsureHTTPRoute creates or updates the HTTPRoute if configured.
+// EnsureHTTPRoute creates or updates the HTTPRoute. When spec.httpRoute is set,
+// the route is built from spec. When spec.httpRoute is nil and eppConfig.DefaultGatewayName
+// is non-empty, a default HTTPRoute is created (attaches to that gateway, backend to
+// the InferencePool). When both are nil/empty, any existing HTTPRoute is cleaned up.
 func EnsureHTTPRoute(
 	ctx context.Context,
 	c client.Client,
 	scheme *runtime.Scheme,
 	ms *modelv1alpha1.ModelService,
 	version string,
+	eppConfig EPPConfig,
 ) error {
-	if ms.Spec.HTTPRoute == nil || ms.Spec.InferencePool == nil {
-		return cleanupTyped(ctx, c, &gatewayv1.HTTPRoute{ObjectMeta: objMeta(ms.Namespace, HTTPRouteName(ms.Name))})
-	}
-
 	metadataLabels := LabelsForRole(ms.Name, ComponentDecode, version)
-	desired := BuildHTTPRoute(ms, metadataLabels)
-
-	return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *gatewayv1.HTTPRoute) {
-		existing.Spec = desired.Spec
-		existing.Labels = desired.Labels
-	})
+	if ms.Spec.HTTPRoute != nil {
+		desired := BuildHTTPRoute(ms, metadataLabels)
+		return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *gatewayv1.HTTPRoute) {
+			existing.Spec = desired.Spec
+			existing.Labels = desired.Labels
+		})
+	}
+	if eppConfig.DefaultGatewayName != "" {
+		poolName := EPPName(ms.Name)
+		if ms.Spec.InferencePool != nil {
+			poolName = InferencePoolName(ms.Name)
+		}
+		desired := BuildDefaultHTTPRoute(ms, metadataLabels, eppConfig.DefaultGatewayName, poolName)
+		return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *gatewayv1.HTTPRoute) {
+			existing.Spec = desired.Spec
+			existing.Labels = desired.Labels
+		})
+	}
+	return cleanupTyped(ctx, c, &gatewayv1.HTTPRoute{ObjectMeta: objMeta(ms.Namespace, HTTPRouteName(ms.Name))})
 }
 
 // EnsurePodMonitors creates or updates PodMonitors for decode (and optionally prefill).

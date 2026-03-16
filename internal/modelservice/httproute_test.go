@@ -27,6 +27,27 @@ import (
 
 const testModelServiceName = "qwen3-32b"
 
+var _ = Describe("BuildDefaultHTTPRoute", func() {
+	It("should build route with parentRef group/kind/name and pool backend", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{Name: "qwen3-0.6b-fp8-dynamic", Namespace: "default"},
+			Spec:       modelv1alpha1.ModelServiceSpec{},
+		}
+		route := BuildDefaultHTTPRoute(ms, map[string]string{"app": "epp"}, "llm-d-infra-inference-gateway", "qwen3-0-6b-fp8-dynamic-epp")
+		Expect(route.Name).To(Equal("qwen3-0.6b-fp8-dynamic"))
+		Expect(route.Namespace).To(Equal("default"))
+		Expect(route.Spec.ParentRefs).To(HaveLen(1))
+		pr := route.Spec.ParentRefs[0]
+		Expect(pr.Group).NotTo(BeNil())
+		Expect(string(*pr.Group)).To(Equal(DefaultGatewayGroup))
+		Expect(pr.Kind).NotTo(BeNil())
+		Expect(string(*pr.Kind)).To(Equal(DefaultGatewayKind))
+		Expect(string(pr.Name)).To(Equal("llm-d-infra-inference-gateway"))
+		Expect(route.Spec.Rules).To(HaveLen(1))
+		Expect(string(route.Spec.Rules[0].BackendRefs[0].Name)).To(Equal("qwen3-0-6b-fp8-dynamic-epp"))
+	})
+})
+
 var _ = Describe("BuildHTTPRoute", func() {
 	It("should construct a valid HTTPRoute with same-namespace gateway", func() {
 		ms := &modelv1alpha1.ModelService{
