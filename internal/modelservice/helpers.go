@@ -42,9 +42,10 @@ const (
 	// DockerConfigMountPath is the mount path for the Docker config inside the Pod (config at config.json).
 	DockerConfigMountPath = "/.docker"
 
-	LabelRole            = "llm-d.ai/role"
-	LabelInferenceServer = "llm-d.ai/inference-serving"
-	LabelModel           = "llm-d.ai/model"
+	LabelRole             = "llm-d.ai/role"
+	LabelInferenceServer  = "llm-d.ai/inference-serving"
+	LabelInferenceServing = "llm-d.ai/inferenceServing"
+	LabelModel            = "llm-d.ai/model"
 	// LabelInferencePool is the Pod label key for the EPP deployment name (value = EPPName(msName)).
 	LabelInferencePool = "inferencepool"
 
@@ -195,9 +196,11 @@ func PodMonitorName(msName, role string) string {
 	return msName + "-" + role
 }
 
-// SelectorLabelsForRole returns labels used for list/match queries (version-independent).
+// SelectorLabelsForRole returns labels used for Deployment spec.selector.matchLabels (version-independent).
 func SelectorLabelsForRole(msName, component string) map[string]string {
-	return labels.Selector(msName, component)
+	m := labels.Selector(msName, component)
+	m[LabelInferenceServing] = LabelValueTrue
+	return m
 }
 
 // LabelsForRole returns the full label set for resources of a specific role.
@@ -208,10 +211,13 @@ func LabelsForRole(msName, component, version string) map[string]string {
 }
 
 // PodLabelsForRole returns labels applied to serving pods, including the llm-d role
-// and llm-d.ai/model (ModelService name). Only the Deployment's Pod template gets
-// llm-d.ai/model; the Deployment object itself does not.
+// and llm-d.ai/model (ModelService name). Includes LabelInferenceServing so that
+// spec.selector.matchLabels can select these pods. Only the Deployment's Pod template
+// gets llm-d.ai/model; the Deployment object itself does not.
 func PodLabelsForRole(msName, component, version, role string) map[string]string {
 	m := LabelsForRole(msName, component, version)
+	delete(m, LabelInferenceServer)
+	m[LabelInferenceServing] = LabelValueTrue
 	m[LabelRole] = role
 	m[LabelModel] = msName
 	return m
@@ -219,11 +225,13 @@ func PodLabelsForRole(msName, component, version, role string) map[string]string
 
 // InferencePoolSelectorLabels returns the label set that InferencePool uses
 // to select serving pods. Uses the common selector (without role) so both
-// decode and prefill pods are included.
+// decode and prefill pods are included. Includes llm-d.ai/model so the pool
+// selects only pods for this ModelService.
 func InferencePoolSelectorLabels(msName string) map[string]string {
 	m := labels.Selector(msName, ComponentDecode)
 	delete(m, labels.Component)
-	m[LabelInferenceServer] = LabelValueTrue
+	m[LabelInferenceServing] = LabelValueTrue
+	m[LabelModel] = msName
 	return m
 }
 

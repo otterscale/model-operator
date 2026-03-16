@@ -119,9 +119,10 @@ var _ = Describe("Naming helpers", func() {
 })
 
 var _ = Describe("InferencePoolSelectorLabels", func() {
-	It("should include the inference-serving label", func() {
+	It("should include the inferenceServing and model labels", func() {
 		selectorLabels := InferencePoolSelectorLabels("qwen3")
 
-		Expect(selectorLabels).To(HaveKeyWithValue(LabelInferenceServer, LabelValueTrue))
+		Expect(selectorLabels).To(HaveKeyWithValue(LabelInferenceServing, LabelValueTrue))
+		Expect(selectorLabels).To(HaveKeyWithValue(LabelModel, "qwen3"))
 	})
 })

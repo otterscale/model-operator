@@ -27,18 +27,22 @@ import (
 )
 
 var _ = Describe("BuildDefaultInferencePool", func() {
-	It("should build pool with EPP name and default spec when InferencePool is nil", func() {
+	It("should build pool with InferencePool name and default spec when InferencePool is nil", func() {
 		ms := &modelv1alpha1.ModelService{
 			ObjectMeta: metav1.ObjectMeta{Name: "qwen3-0.6b-fp8-dynamic", Namespace: "default"},
 			Spec:       modelv1alpha1.ModelServiceSpec{Engine: modelv1alpha1.EngineSpec{Port: 8000}},
 		}
 		pool := BuildDefaultInferencePool(ms, map[string]string{"app": "epp"})
-		Expect(pool.Name).To(Equal("qwen3-0-6b-fp8-dynamic-epp"))
+		Expect(pool.Name).To(Equal("qwen3-0.6b-fp8-dynamic"))
 		Expect(pool.Namespace).To(Equal("default"))
+		Expect(pool.Spec.EndpointPickerRef.Group).NotTo(BeNil())
+		Expect(string(*pool.Spec.EndpointPickerRef.Group)).To(BeEmpty(), "Core API group")
+		Expect(pool.Spec.EndpointPickerRef.Kind).To(Equal(inferenceextv1.Kind("Service")))
 		Expect(pool.Spec.EndpointPickerRef.Name).To(Equal(inferenceextv1.ObjectName("qwen3-0-6b-fp8-dynamic-epp")))
 		Expect(pool.Spec.EndpointPickerRef.Port.Number).To(Equal(inferenceextv1.PortNumber(9002)))
-		Expect(pool.Spec.EndpointPickerRef.FailureMode).To(Equal(inferenceextv1.EndpointPickerFailOpen))
-		Expect(pool.Spec.Selector.MatchLabels).To(HaveKey(inferenceextv1.LabelKey(LabelInferenceServer)))
+		Expect(pool.Spec.EndpointPickerRef.FailureMode).To(Equal(inferenceextv1.EndpointPickerFailClose))
+		Expect(pool.Spec.Selector.MatchLabels).To(HaveKey(inferenceextv1.LabelKey(LabelInferenceServing)))
+		Expect(pool.Spec.Selector.MatchLabels).To(HaveKeyWithValue(inferenceextv1.LabelKey(LabelModel), inferenceextv1.LabelValue("qwen3-0.6b-fp8-dynamic")))
 	})
 })
 
@@ -70,6 +74,9 @@ var _ = Describe("BuildInferencePool", func() {
 		Expect(pool.Spec.TargetPorts[0].Number).To(Equal(inferenceextv1.PortNumber(8000)))
 
 		eppRef := pool.Spec.EndpointPickerRef
+		Expect(eppRef.Group).NotTo(BeNil())
+		Expect(string(*eppRef.Group)).To(BeEmpty())
+		Expect(eppRef.Kind).To(Equal(inferenceextv1.Kind("Service")))
 		Expect(string(eppRef.Name)).To(Equal("qwen3-32b-epp"))
 		Expect(eppRef.Port).NotTo(BeNil())
 		Expect(eppRef.Port.Number).To(Equal(inferenceextv1.PortNumber(9002)))
@@ -96,11 +103,11 @@ var _ = Describe("BuildInferencePool", func() {
 		Expect(pool.Spec.TargetPorts[0].Number).To(Equal(inferenceextv1.PortNumber(8000)))
 		// Default EPP port = 9002
 		Expect(pool.Spec.EndpointPickerRef.Port.Number).To(Equal(inferenceextv1.PortNumber(9002)))
-		// Default failure mode = FailOpen
-		Expect(pool.Spec.EndpointPickerRef.FailureMode).To(Equal(inferenceextv1.EndpointPickerFailOpen))
+		// Default failure mode = FailClose
+		Expect(pool.Spec.EndpointPickerRef.FailureMode).To(Equal(inferenceextv1.EndpointPickerFailClose))
 	})
 
-	It("should include the inference-serving selector label", func() {
+	It("should include the inferenceServing selector label", func() {
 		ms := &modelv1alpha1.ModelService{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test",
@@ -117,8 +124,8 @@ var _ = Describe("BuildInferencePool", func() {
 		pool := BuildInferencePool(ms, nil)
 
 		Expect(pool.Spec.Selector.MatchLabels).NotTo(BeEmpty())
-		val, ok := pool.Spec.Selector.MatchLabels[inferenceextv1.LabelKey(LabelInferenceServer)]
-		Expect(ok).To(BeTrue(), "Missing llm-d.ai/inference-serving label in selector")
+		val, ok := pool.Spec.Selector.MatchLabels[inferenceextv1.LabelKey(LabelInferenceServing)]
+		Expect(ok).To(BeTrue(), "Missing llm-d.ai/inferenceServing label in selector")
 		Expect(string(val)).To(Equal(LabelValueTrue))
 	})
 })

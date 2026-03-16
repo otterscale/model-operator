@@ -72,7 +72,9 @@ func BuildEPPDeployment(
 
 	pluginsConfigFile := PluginsConfigFile(ms)
 
-	args := buildEPPArgs(name, ms.Namespace, pluginsConfigFile, extProcPort, *replicas, eppConfig)
+	// --pool-name must match the InferencePool CR name (no -epp suffix).
+	poolName := InferencePoolName(ms.Name)
+	args := buildEPPArgs(poolName, ms.Namespace, pluginsConfigFile, extProcPort, *replicas, eppConfig)
 
 	podAnnotations := map[string]string{}
 	if configHash != "" {

@@ -32,6 +32,32 @@ const DefaultGatewayGroup = "gateway.networking.k8s.io"
 // DefaultGatewayKind is the kind for Gateway parentRef in HTTPRoute.
 const DefaultGatewayKind = "Gateway"
 
+// DefaultGatewayNamespace is the namespace of the Gateway in default HTTPRoute parentRefs.
+const DefaultGatewayNamespace = "llm-d"
+
+// HeaderOtterScaleModelName is the HTTP header name used to match the model (value = ModelService name).
+const HeaderOtterScaleModelName = "OtterScale-Model-Name"
+
+// modelRouteMatch returns a single HTTPRouteMatch: header OtterScale-Model-Name=modelName (Exact), path PathPrefix "/".
+func modelRouteMatch(modelName string) gatewayv1.HTTPRouteMatch {
+	pathPrefix := gatewayv1.PathMatchPathPrefix
+	pathVal := "/"
+	headerExact := gatewayv1.HeaderMatchExact
+	return gatewayv1.HTTPRouteMatch{
+		Headers: []gatewayv1.HTTPHeaderMatch{
+			{
+				Type:  &headerExact,
+				Name:  gatewayv1.HTTPHeaderName(HeaderOtterScaleModelName),
+				Value: modelName,
+			},
+		},
+		Path: &gatewayv1.HTTPPathMatch{
+			Type:  &pathPrefix,
+			Value: &pathVal,
+		},
+	}
+}
+
 func BuildDefaultHTTPRoute(
 	ms *modelv1alpha1.ModelService,
 	metadataLabels map[string]string,
@@ -40,14 +66,17 @@ func BuildDefaultHTTPRoute(
 ) *gatewayv1.HTTPRoute {
 	group := gatewayv1.Group(DefaultGatewayGroup)
 	kind := gatewayv1.Kind(DefaultGatewayKind)
+	ns := gatewayv1.Namespace(DefaultGatewayNamespace)
 	parentRef := gatewayv1.ParentReference{
-		Group: &group,
-		Kind:  &kind,
-		Name:  gatewayv1.ObjectName(gatewayName),
+		Group:     &group,
+		Kind:      &kind,
+		Name:      gatewayv1.ObjectName(gatewayName),
+		Namespace: &ns,
 	}
 	backendGroup := gatewayv1.Group("inference.networking.k8s.io")
 	backendKind := gatewayv1.Kind("InferencePool")
 	rule := gatewayv1.HTTPRouteRule{
+		Matches: []gatewayv1.HTTPRouteMatch{modelRouteMatch(ms.Name)},
 		BackendRefs: []gatewayv1.HTTPBackendRef{
 			{
 				BackendRef: gatewayv1.BackendRef{
@@ -104,6 +133,7 @@ func BuildHTTPRoute(
 	backendKind := gatewayv1.Kind("InferencePool")
 
 	rule := gatewayv1.HTTPRouteRule{
+		Matches: []gatewayv1.HTTPRouteMatch{modelRouteMatch(ms.Name)},
 		BackendRefs: []gatewayv1.HTTPBackendRef{
 			{
 				BackendRef: gatewayv1.BackendRef{

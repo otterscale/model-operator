@@ -85,9 +85,15 @@ func ensureDeployment(
 ) error {
 	selectorLabels := SelectorLabelsForRole(ms.Name, component)
 	metadataLabels := LabelsForRole(ms.Name, component, version)
+	deployLabels := make(map[string]string, len(metadataLabels))
+	for k, v := range metadataLabels {
+		if k != LabelInferenceServer {
+			deployLabels[k] = v
+		}
+	}
 	podLabels := PodLabelsForRole(ms.Name, component, version, roleName)
 
-	desired := BuildDeployment(ms, role, roleName, deployName, podLabels, metadataLabels, selectorLabels, tracing, kitImage)
+	desired := BuildDeployment(ms, role, roleName, deployName, podLabels, deployLabels, selectorLabels, tracing, kitImage)
 	if err := ctrlutil.SetControllerReference(ms, desired, scheme); err != nil {
 		return fmt.Errorf("setting Deployment owner reference: %w", err)
 	}
@@ -137,8 +143,8 @@ func cleanupDeployment(ctx context.Context, c client.Client, namespace, name str
 }
 
 // EnsureInferencePool creates or updates the InferencePool. When spec.inferencePool is nil,
-// a default InferencePool is created with name EPPName(ms.Name) so the EPP Pod's informer
-// can sync and find its pool (--pool-name matches).
+// a default InferencePool is created with name InferencePoolName(ms.Name) (no -epp suffix)
+// so it matches the HTTPRoute backend and the EPP --pool-name flag.
 func EnsureInferencePool(
 	ctx context.Context,
 	c client.Client,
@@ -147,10 +153,18 @@ func EnsureInferencePool(
 	version string,
 ) error {
 	metadataLabels := LabelsForRole(ms.Name, ComponentDecode, version)
+	poolLabels := make(map[string]string, len(metadataLabels))
+	for k, v := range metadataLabels {
+		if k != LabelInferenceServer {
+			poolLabels[k] = v
+		}
+	}
 	if ms.Spec.InferencePool == nil {
-		// Remove any explicit InferencePool (name = ms.Name) from a previous spec.
-		_ = cleanupTyped(ctx, c, &inferenceextv1.InferencePool{ObjectMeta: objMeta(ms.Namespace, InferencePoolName(ms.Name))})
-		desired := BuildDefaultInferencePool(ms, metadataLabels)
+		// Ensure the default InferencePool (name = InferencePoolName(ms.Name)). Do not cleanup
+		// that name here—we are about to create/update it. Only remove a legacy pool with the
+		// -epp suffix if it exists from before the naming was unified.
+		_ = cleanupTyped(ctx, c, &inferenceextv1.InferencePool{ObjectMeta: objMeta(ms.Namespace, EPPName(ms.Name))})
+		desired := BuildDefaultInferencePool(ms, poolLabels)
 		return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *inferenceextv1.InferencePool) {
 			existing.Spec = desired.Spec
 			existing.Labels = desired.Labels
@@ -158,7 +172,7 @@ func EnsureInferencePool(
 	}
 	// Remove default InferencePool (name = EPPName) when using explicit spec.
 	_ = cleanupTyped(ctx, c, &inferenceextv1.InferencePool{ObjectMeta: objMeta(ms.Namespace, EPPName(ms.Name))})
-	desired := BuildInferencePool(ms, metadataLabels)
+	desired := BuildInferencePool(ms, poolLabels)
 	return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *inferenceextv1.InferencePool) {
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
@@ -178,19 +192,24 @@ func EnsureHTTPRoute(
 	eppConfig EPPConfig,
 ) error {
 	metadataLabels := LabelsForRole(ms.Name, ComponentDecode, version)
+	routeLabels := make(map[string]string, len(metadataLabels))
+	for k, v := range metadataLabels {
+		if k != LabelInferenceServer {
+			routeLabels[k] = v
+		}
+	}
 	if ms.Spec.HTTPRoute != nil {
-		desired := BuildHTTPRoute(ms, metadataLabels)
+		desired := BuildHTTPRoute(ms, routeLabels)
 		return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *gatewayv1.HTTPRoute) {
 			existing.Spec = desired.Spec
 			existing.Labels = desired.Labels
 		})
 	}
 	if eppConfig.DefaultGatewayName != "" {
-		poolName := EPPName(ms.Name)
-		if ms.Spec.InferencePool != nil {
-			poolName = InferencePoolName(ms.Name)
-		}
-		desired := BuildDefaultHTTPRoute(ms, metadataLabels, eppConfig.DefaultGatewayName, poolName)
+		// HTTPRoute backendRefs.name should always point to the InferencePool name
+		// (both for default and explicit InferencePool cases).
+		poolName := InferencePoolName(ms.Name)
+		desired := BuildDefaultHTTPRoute(ms, routeLabels, eppConfig.DefaultGatewayName, poolName)
 		return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *gatewayv1.HTTPRoute) {
 			existing.Spec = desired.Spec
 			existing.Labels = desired.Labels
@@ -511,13 +530,23 @@ func ensureClusterResource[T client.Object](
 		return nil
 	}
 	if err := c.Update(ctx, existing); err != nil {
+		// If the resource was deleted between Get and Update, treat it as NotFound and recreate.
+		if apierrors.IsNotFound(err) {
+			if err := c.Create(ctx, desired); err != nil {
+				return fmt.Errorf("recreating %s %s after NotFound: %w", kind, name, err)
+			}
+			log.FromContext(ctx).Info("Recreated "+kind, "name", name)
+			return nil
+		}
 		return fmt.Errorf("updating %s %s: %w", kind, name, err)
 	}
 	log.FromContext(ctx).Info("Updated "+kind, "name", name)
 	return nil
 }
 
-// EnsureDestinationRule creates or updates the Istio DestinationRule.
+// EnsureDestinationRule creates or updates the Istio DestinationRule for the EPP Service.
+// The rule is ensured whenever the provider is Istio so that the EPP Deployment can
+// connect to its own Service over mTLS, regardless of whether spec.inferencePool is set.
 func EnsureDestinationRule(
 	ctx context.Context,
 	c client.Client,
@@ -527,7 +556,7 @@ func EnsureDestinationRule(
 	version string,
 ) error {
 	name := EPPName(ms.Name)
-	if ms.Spec.InferencePool == nil || eppConfig.Provider != ProviderIstio {
+	if eppConfig.Provider != ProviderIstio {
 		return cleanupTyped(ctx, c, &istionetworkingv1beta1.DestinationRule{ObjectMeta: objMeta(ms.Namespace, name)})
 	}
 	metadataLabels := EPPLabels(ms.Name, version)
@@ -601,12 +630,37 @@ func ensureResource[T client.Object](
 		return err
 	}
 
+	// Special-case Istio DestinationRule to avoid panics when deep-equaling
+	// protobuf-generated types (e.g. wrapperspb.BoolValue).
+	if _, ok := any(existing).(*istionetworkingv1beta1.DestinationRule); ok {
+		mutateFn(existing, desired)
+		if err := c.Update(ctx, existing); err != nil {
+			if apierrors.IsNotFound(err) {
+				if err := c.Create(ctx, desired); err != nil {
+					return fmt.Errorf("recreating %s %s after NotFound: %w", kind, name, err)
+				}
+				log.FromContext(ctx).Info("Recreated "+kind, "name", name)
+				return nil
+			}
+			return fmt.Errorf("updating %s %s: %w", kind, name, err)
+		}
+		log.FromContext(ctx).Info("Updated "+kind, "name", name)
+		return nil
+	}
+
 	before := existing.DeepCopyObject()
 	mutateFn(existing, desired)
 	if equality.Semantic.DeepEqual(before, existing) {
 		return nil
 	}
 	if err := c.Update(ctx, existing); err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := c.Create(ctx, desired); err != nil {
+				return fmt.Errorf("recreating %s %s after NotFound: %w", kind, name, err)
+			}
+			log.FromContext(ctx).Info("Recreated "+kind, "name", name)
+			return nil
+		}
 		return fmt.Errorf("updating %s %s: %w", kind, name, err)
 	}
 	log.FromContext(ctx).Info("Updated "+kind, "name", name)
