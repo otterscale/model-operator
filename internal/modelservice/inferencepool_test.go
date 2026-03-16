@@ -26,6 +26,22 @@ import (
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
+var _ = Describe("BuildDefaultInferencePool", func() {
+	It("should build pool with EPP name and default spec when InferencePool is nil", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{Name: "qwen3-0.6b-fp8-dynamic", Namespace: "default"},
+			Spec:       modelv1alpha1.ModelServiceSpec{Engine: modelv1alpha1.EngineSpec{Port: 8000}},
+		}
+		pool := BuildDefaultInferencePool(ms, map[string]string{"app": "epp"})
+		Expect(pool.Name).To(Equal("qwen3-0-6b-fp8-dynamic-epp"))
+		Expect(pool.Namespace).To(Equal("default"))
+		Expect(pool.Spec.EndpointPickerRef.Name).To(Equal(inferenceextv1.ObjectName("qwen3-0-6b-fp8-dynamic-epp")))
+		Expect(pool.Spec.EndpointPickerRef.Port.Number).To(Equal(inferenceextv1.PortNumber(9002)))
+		Expect(pool.Spec.EndpointPickerRef.FailureMode).To(Equal(inferenceextv1.EndpointPickerFailOpen))
+		Expect(pool.Spec.Selector.MatchLabels).To(HaveKey(inferenceextv1.LabelKey(LabelInferenceServer)))
+	})
+})
+
 var _ = Describe("BuildInferencePool", func() {
 	It("should construct a valid InferencePool with explicit values", func() {
 		ms := &modelv1alpha1.ModelService{

@@ -98,6 +98,15 @@ var _ = Describe("Naming helpers", func() {
 	It("should generate correct EPPName", func() {
 		Expect(EPPName("qwen3")).To(Equal("qwen3-epp"))
 	})
+	It("should generate DNS-1035 EPP Service name (no dots)", func() {
+		Expect(EPPNameForService("qwen3-0.6b-fp8-dynamic")).To(Equal("qwen3-0-6b-fp8-dynamic-epp"))
+		Expect(EPPNameForService("qwen3")).To(Equal("qwen3-epp"))
+	})
+	It("should sanitize DNS-1035 label", func() {
+		Expect(SanitizeDNS1035Label("qwen3-0.6b-fp8-dynamic")).To(Equal("qwen3-0-6b-fp8-dynamic"))
+		Expect(SanitizeDNS1035Label("MyModel_1.0")).To(Equal("mymodel-1-0"))
+		Expect(SanitizeDNS1035Label("0.6b")).To(Equal("m-0-6b"))
+	})
 	It("should generate correct EPPConfigMapName", func() {
 		Expect(EPPConfigMapName("qwen3")).To(Equal("qwen3-epp-config"))
 	})

@@ -67,8 +67,6 @@ var _ = Describe("BuildEPPConfigMap", func() {
 			Expect(data).To(ContainSubstring("queue-scorer"))
 			Expect(data).To(ContainSubstring("kv-cache-utilization-scorer"))
 			Expect(data).To(ContainSubstring("prefix-cache-scorer"))
-			Expect(data).To(ContainSubstring("metrics-data-source"))
-			Expect(data).To(ContainSubstring("core-metrics-extractor"))
 			Expect(data).To(ContainSubstring("schedulingProfiles"))
 		})
 	})

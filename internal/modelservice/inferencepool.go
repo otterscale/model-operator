@@ -23,6 +23,40 @@ import (
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
+// BuildDefaultInferencePool constructs a default InferencePool when ms.Spec.InferencePool is nil.
+// The pool name is EPPName(ms.Name) so the EPP (started with --pool-name=EPPName) can find it
+// and the InferencePool informer can sync. Uses default port 9002 and FailOpen.
+func BuildDefaultInferencePool(
+	ms *modelv1alpha1.ModelService,
+	metadataLabels map[string]string,
+) *inferenceextv1.InferencePool {
+	eppName := EPPName(ms.Name)
+	selectorLabels := InferencePoolSelectorLabels(ms.Name)
+	matchLabels := make(map[inferenceextv1.LabelKey]inferenceextv1.LabelValue, len(selectorLabels))
+	for k, v := range selectorLabels {
+		matchLabels[inferenceextv1.LabelKey(k)] = inferenceextv1.LabelValue(v)
+	}
+	port := enginePort(ms)
+	return &inferenceextv1.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      eppName,
+			Namespace: ms.Namespace,
+			Labels:    metadataLabels,
+		},
+		Spec: inferenceextv1.InferencePoolSpec{
+			TargetPorts: []inferenceextv1.Port{
+				{Number: inferenceextv1.PortNumber(port)},
+			},
+			Selector: inferenceextv1.LabelSelector{MatchLabels: matchLabels},
+			EndpointPickerRef: inferenceextv1.EndpointPickerRef{
+				Name:        inferenceextv1.ObjectName(eppName),
+				Port:        &inferenceextv1.Port{Number: inferenceextv1.PortNumber(9002)},
+				FailureMode: inferenceextv1.EndpointPickerFailOpen,
+			},
+		},
+	}
+}
+
 // BuildInferencePool constructs a typed InferencePool resource.
 //
 // The InferencePool selector matches serving pods via the common label set
