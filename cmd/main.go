@@ -84,7 +84,7 @@ func main() {
 	flag.StringVar(&defaultEngineImage, "default-engine-image", "ghcr.io/llm-d/llm-d-cuda:v0.5.1",
 		"Default vLLM engine container image. Falls back to this when spec.engine.image is omitted.")
 	flag.StringVar(&defaultEPPImage, "default-epp-image", "ghcr.io/llm-d/llm-d-inference-scheduler:v0.6.0",
-		"Default Endpoint Picker container image. Falls back to this when spec.inferencePool.endpointPicker.image is omitted.")
+		"Default EPP image. Falls back to this when spec.inferencePool.endpointPicker.image is omitted.")
 	flag.StringVar(&defaultRoutingProxyImage, "default-routing-proxy-image", "ghcr.io/llm-d/llm-d-routing-sidecar:v0.6.0",
 		"Default routing proxy sidecar image. Falls back to this when spec.routingProxy.image is omitted.")
 	flag.StringVar(&defaultGatewayName, "default-gateway-name", "llm-d-infra-inference-gateway",
