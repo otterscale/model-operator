@@ -44,12 +44,78 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
+// inferencePoolCRDYAML is a minimal InferencePool CRD for envtest (gateway-api-inference-extension).
+// Required so the ModelService controller can create InferencePool resources in tests.
+const inferencePoolCRDYAML = `
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: inferencepools.inference.networking.k8s.io
+  annotations:
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/1173
+spec:
+  group: inference.networking.k8s.io
+  names:
+    kind: InferencePool
+    listKind: InferencePoolList
+    plural: inferencepools
+    shortNames: ["infpool"]
+    singular: inferencepool
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources: { status: {} }
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [selector, targetPorts, endpointPickerRef]
+              properties:
+                selector:
+                  type: object
+                  required: [matchLabels]
+                  properties:
+                    matchLabels:
+                      type: object
+                      additionalProperties: { type: string }
+                targetPorts:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [number]
+                    properties:
+                      number: { type: integer, format: int32, minimum: 1, maximum: 65535 }
+                endpointPickerRef:
+                  type: object
+                  required: [name]
+                  properties:
+                    group: { type: string }
+                    kind: { type: string }
+                    name: { type: string }
+                    port:
+                      type: object
+                      properties:
+                        number: { type: integer, format: int32 }
+                    failureMode: { type: string, enum: [FailOpen, FailClose] }
+            status:
+              type: object
+              properties:
+                parents: { type: array, items: { type: object } }
+`
+
 var (
-	ctx       context.Context
-	cancel    context.CancelFunc
-	testEnv   *envtest.Environment
-	cfg       *rest.Config
-	k8sClient client.Client
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	testEnv             *envtest.Environment
+	cfg                 *rest.Config
+	k8sClient           client.Client
+	inferencePoolCRDDir string
 )
 
 func TestControllers(t *testing.T) {
@@ -78,9 +144,18 @@ var _ = BeforeSuite(func() {
 	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")
+	inferencePoolCRDDir, err = os.MkdirTemp("", "model-operator-crd-")
+	Expect(err).NotTo(HaveOccurred())
+	Expect(os.WriteFile(
+		filepath.Join(inferencePoolCRDDir, "inference.networking.k8s.io_inferencepools.yaml"),
+		[]byte(inferencePoolCRDYAML),
+		0600,
+	)).To(Succeed())
+
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
+			inferencePoolCRDDir,
 		},
 		ErrorIfCRDPathMissing: true,
 	}
@@ -106,6 +181,9 @@ var _ = AfterSuite(func() {
 	Eventually(func() error {
 		return testEnv.Stop()
 	}, time.Minute, time.Second).Should(Succeed())
+	if inferencePoolCRDDir != "" {
+		_ = os.RemoveAll(inferencePoolCRDDir)
+	}
 })
 
 // getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
