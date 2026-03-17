@@ -128,6 +128,12 @@ func HTTPRouteName(msName string) string {
 	return msName
 }
 
+// HTTPRouteLabels returns the metadata label set for the HTTPRoute resource.
+// Uses component "epp" so the route is grouped with EPP-related resources.
+func HTTPRouteLabels(msName, version string) map[string]string {
+	return labels.Standard(HTTPRouteName(msName), ComponentEPP, version)
+}
+
 // EPPName returns the EPP resource name (Deployment, Service, SA, Role, RoleBinding, ConfigMap).
 // Must be DNS-1035 compliant so Role/SA/Service etc. can be created when msName contains dots.
 func EPPName(msName string) string {
@@ -197,9 +203,12 @@ func PodMonitorName(msName, role string) string {
 }
 
 // SelectorLabelsForRole returns labels used for Deployment spec.selector.matchLabels (version-independent).
-func SelectorLabelsForRole(msName, component string) map[string]string {
+// Includes llm-d.ai/model and llm-d.ai/role so the selector matches the Pod template labels.
+func SelectorLabelsForRole(msName, component, role string) map[string]string {
 	m := labels.Selector(msName, component)
 	m[LabelInferenceServing] = LabelValueTrue
+	m[LabelModel] = msName
+	m[LabelRole] = role
 	return m
 }
 
@@ -221,6 +230,12 @@ func PodLabelsForRole(msName, component, version, role string) map[string]string
 	m[LabelRole] = role
 	m[LabelModel] = msName
 	return m
+}
+
+// InferencePoolLabels returns the metadata label set for the InferencePool resource.
+// Uses component "epp" so the pool is grouped with EPP-related resources.
+func InferencePoolLabels(msName, version string) map[string]string {
+	return labels.Standard(InferencePoolName(msName), ComponentEPP, version)
 }
 
 // InferencePoolSelectorLabels returns the label set that InferencePool uses

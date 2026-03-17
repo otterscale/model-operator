@@ -83,7 +83,7 @@ func ensureDeployment(
 	tracing TracingConfig,
 	kitImage string,
 ) error {
-	selectorLabels := SelectorLabelsForRole(ms.Name, component)
+	selectorLabels := SelectorLabelsForRole(ms.Name, component, roleName)
 	metadataLabels := LabelsForRole(ms.Name, component, version)
 	deployLabels := make(map[string]string, len(metadataLabels))
 	for k, v := range metadataLabels {
@@ -152,13 +152,7 @@ func EnsureInferencePool(
 	ms *modelv1alpha1.ModelService,
 	version string,
 ) error {
-	metadataLabels := LabelsForRole(ms.Name, ComponentDecode, version)
-	poolLabels := make(map[string]string, len(metadataLabels))
-	for k, v := range metadataLabels {
-		if k != LabelInferenceServer {
-			poolLabels[k] = v
-		}
-	}
+	poolLabels := InferencePoolLabels(ms.Name, version)
 	if ms.Spec.InferencePool == nil {
 		// Ensure the default InferencePool (name = InferencePoolName(ms.Name)). Do not cleanup
 		// that name here—we are about to create/update it. Only remove a legacy pool with the
@@ -191,13 +185,7 @@ func EnsureHTTPRoute(
 	version string,
 	eppConfig EPPConfig,
 ) error {
-	metadataLabels := LabelsForRole(ms.Name, ComponentDecode, version)
-	routeLabels := make(map[string]string, len(metadataLabels))
-	for k, v := range metadataLabels {
-		if k != LabelInferenceServer {
-			routeLabels[k] = v
-		}
-	}
+	routeLabels := HTTPRouteLabels(ms.Name, version)
 	if ms.Spec.HTTPRoute != nil {
 		desired := BuildHTTPRoute(ms, routeLabels)
 		return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *gatewayv1.HTTPRoute) {
@@ -237,7 +225,7 @@ func EnsurePodMonitors(
 		return cleanupTyped(ctx, c, &monitoringv1.PodMonitor{ObjectMeta: objMeta(ms.Namespace, PodMonitorName(ms.Name, RolePrefill))})
 	}
 
-	decodeSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentDecode)
+	decodeSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentDecode, RoleDecode)
 	decodeLabels := LabelsForRole(ms.Name, ComponentDecode, version)
 	decodeMonitor := BuildPodMonitor(ms, RoleDecode, decodeSelectorLabels, decodeLabels)
 	if err := ensureResource(ctx, c, scheme, ms, decodeMonitor, func(existing, desired *monitoringv1.PodMonitor) {
@@ -248,7 +236,7 @@ func EnsurePodMonitors(
 	}
 
 	if ms.Spec.Prefill != nil {
-		prefillSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentPrefill)
+		prefillSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentPrefill, RolePrefill)
 		prefillLabels := LabelsForRole(ms.Name, ComponentPrefill, version)
 		prefillMonitor := BuildPodMonitor(ms, RolePrefill, prefillSelectorLabels, prefillLabels)
 		return ensureResource(ctx, c, scheme, ms, prefillMonitor, func(existing, desired *monitoringv1.PodMonitor) {

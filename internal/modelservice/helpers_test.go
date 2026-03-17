@@ -118,6 +118,24 @@ var _ = Describe("Naming helpers", func() {
 	})
 })
 
+var _ = Describe("InferencePoolLabels", func() {
+	It("should use component epp and InferencePool name", func() {
+		poolLabels := InferencePoolLabels("qwen3", "devel")
+
+		Expect(poolLabels).To(HaveKeyWithValue("app.kubernetes.io/component", ComponentEPP))
+		Expect(poolLabels).To(HaveKeyWithValue("app.kubernetes.io/name", "qwen3"))
+	})
+})
+
+var _ = Describe("HTTPRouteLabels", func() {
+	It("should use component epp and HTTPRoute name", func() {
+		routeLabels := HTTPRouteLabels("qwen3", "devel")
+
+		Expect(routeLabels).To(HaveKeyWithValue("app.kubernetes.io/component", ComponentEPP))
+		Expect(routeLabels).To(HaveKeyWithValue("app.kubernetes.io/name", "qwen3"))
+	})
+})
+
 var _ = Describe("InferencePoolSelectorLabels", func() {
 	It("should include the inferenceServing and model labels", func() {
 		selectorLabels := InferencePoolSelectorLabels("qwen3")
