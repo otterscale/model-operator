@@ -63,12 +63,16 @@ func init() {
 
 // nolint:gocyclo
 func main() {
+	var defaultEngineImage string
+	var defaultEPPImage string
+	var defaultRoutingProxyImage string
+	var defaultGatewayName string
+	var kitImage string
 	var metricsAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var enableLeaderElection bool
 	var probeAddr string
 	var secureMetrics bool
-	var kitImage string
 	var provider string
 	var enableHTTP2 bool
 	var metricsEndpointAuth bool
@@ -77,6 +81,17 @@ func main() {
 	var tracingSampler string
 	var tracingSamplerArg string
 	var tlsOpts []func(*tls.Config)
+	flag.StringVar(&defaultEngineImage, "default-engine-image", "ghcr.io/llm-d/llm-d-cuda:v0.5.1",
+		"Default vLLM engine container image. Falls back to this when spec.engine.image is omitted.")
+	flag.StringVar(&defaultEPPImage, "default-epp-image", "ghcr.io/llm-d/llm-d-inference-scheduler:v0.6.0",
+		"Default Endpoint Picker container image. Falls back to this when spec.inferencePool.endpointPicker.image is omitted.")
+	flag.StringVar(&defaultRoutingProxyImage, "default-routing-proxy-image", "ghcr.io/llm-d/llm-d-routing-sidecar:v0.6.0",
+		"Default routing proxy sidecar image. Falls back to this when spec.routingProxy.image is omitted.")
+	flag.StringVar(&defaultGatewayName, "default-gateway-name", "llm-d-infra-inference-gateway",
+		"Default Gateway name for HTTPRoute parentRef. Falls back to this when spec.httpRoute is omitted. "+
+			"Set to empty to disable automatic HTTPRoute creation.")
+	flag.StringVar(&kitImage, "kit-image", "ghcr.io/kitops-ml/kitops:v1.11.0",
+		"Kit CLI container image used for model import/pack/push jobs.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -91,8 +106,6 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&kitImage, "kit-image", "ghcr.io/kitops-ml/kitops:v1.11.0",
-		"Container image containing the kit CLI for import/pack/push jobs.")
 	flag.StringVar(&provider, "provider", "istio",
 		"Infrastructure provider for EPP networking: istio, gke, none.")
 	flag.BoolVar(&metricsEndpointAuth, "metrics-endpoint-auth", true,
@@ -105,10 +118,6 @@ func main() {
 		"OpenTelemetry traces sampler for EPP.")
 	flag.StringVar(&tracingSamplerArg, "tracing-sampler-arg", "0.01",
 		"Argument passed to the OpenTelemetry traces sampler.")
-	var defaultGatewayName string
-	flag.StringVar(&defaultGatewayName, "default-gateway-name", "llm-d-infra-inference-gateway",
-		"Gateway name for default HTTPRoute parentRef when spec.httpRoute is not set. "+
-			"Set to empty to disable creating HTTPRoute by default.")
 	opts := zap.Options{
 		Development: false,
 	}
@@ -117,7 +126,11 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	setupLog.Info("Starting manager", "version", version, "kitImage", kitImage)
+	setupLog.Info("Starting manager", "version", version, "kitImage", kitImage,
+		"defaultEngineImage", defaultEngineImage,
+		"defaultEPPImage", defaultEPPImage,
+		"defaultRoutingProxyImage", defaultRoutingProxyImage,
+	)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -207,6 +220,11 @@ func main() {
 		Scheme:   mgr.GetScheme(),
 		Version:  version,
 		Recorder: mgr.GetEventRecorder("modelservice-controller"),
+		DefaultImages: modelservice.DefaultImages{
+			Engine:       defaultEngineImage,
+			EPP:          defaultEPPImage,
+			RoutingProxy: defaultRoutingProxyImage,
+		},
 		EPPConfig: modelservice.EPPConfig{
 			Provider:            provider,
 			MetricsEndpointAuth: metricsEndpointAuth,

@@ -38,10 +38,6 @@ const (
 	eppMetricsPortName           = "http-metrics"
 	eppHealthPortName            = "grpc-health"
 	eppSingleReplicaProbeService = "inference-extension"
-
-	// DefaultEPPImage is the default EPP container image when spec.inferencePool is not set.
-	// Used so that the EPP Deployment is always created with the ModelService.
-	DefaultEPPImage = "ghcr.io/llm-d/llm-d-inference-scheduler:v0.6.0"
 )
 
 // BuildEPPDeployment constructs the EPP Deployment.

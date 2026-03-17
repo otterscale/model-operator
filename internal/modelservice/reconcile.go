@@ -283,12 +283,14 @@ func EnsureEPPConfigMap(
 
 // EnsureEPPDeployment creates or updates the EPP Deployment. When spec.inferencePool is not set,
 // a default InferencePool is used so the EPP Deployment is always created with the ModelService.
+// The defaultImages parameter supplies operator-level image defaults for the synthetic EPP spec.
 func EnsureEPPDeployment(
 	ctx context.Context,
 	c client.Client,
 	scheme *runtime.Scheme,
 	ms *modelv1alpha1.ModelService,
 	eppConfig EPPConfig,
+	defaultImages DefaultImages,
 	version string,
 	configHash string,
 ) error {
@@ -299,7 +301,7 @@ func EnsureEPPDeployment(
 		msToBuild = ms.DeepCopy()
 		msToBuild.Spec.InferencePool = &modelv1alpha1.InferencePoolSpec{
 			EndpointPicker: modelv1alpha1.EndpointPickerSpec{
-				Image:    DefaultEPPImage,
+				Image:    defaultImages.EPP,
 				Replicas: &replicas,
 				Port:     9002,
 			},
