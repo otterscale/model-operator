@@ -107,7 +107,8 @@ func main() {
 		"Argument passed to the OpenTelemetry traces sampler.")
 	var defaultGatewayName string
 	flag.StringVar(&defaultGatewayName, "default-gateway-name", "llm-d-infra-inference-gateway",
-		"Gateway name for default HTTPRoute parentRef when spec.httpRoute is not set. Set to empty to disable creating HTTPRoute by default.")
+		"Gateway name for default HTTPRoute parentRef when spec.httpRoute is not set. "+
+			"Set to empty to disable creating HTTPRoute by default.")
 	opts := zap.Options{
 		Development: false,
 	}
