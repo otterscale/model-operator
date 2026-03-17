@@ -91,9 +91,12 @@ var _ = Describe("ModelService Controller", func() {
 
 		It("should create the decode Deployment", func() {
 			reconciler := &ModelServiceReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Version:  "test",
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				Version: "test",
+				DefaultImages: modelservice.DefaultImages{
+					EPP: "ghcr.io/test/epp:latest",
+				},
 				Recorder: &events.FakeRecorder{},
 				KitImage: "ghcr.io/kitops-ml/kitops:v1.11.0",
 			}
@@ -134,9 +137,12 @@ var _ = Describe("ModelService Controller", func() {
 
 		It("should not create prefill Deployment when not specified", func() {
 			reconciler := &ModelServiceReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Version:  "test",
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				Version: "test",
+				DefaultImages: modelservice.DefaultImages{
+					EPP: "ghcr.io/test/epp:latest",
+				},
 				Recorder: &events.FakeRecorder{},
 				KitImage: "ghcr.io/kitops-ml/kitops:v1.11.0",
 			}
@@ -160,9 +166,12 @@ var _ = Describe("ModelService Controller", func() {
 
 		It("should update status after reconciliation", func() {
 			reconciler := &ModelServiceReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Version:  "test",
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				Version: "test",
+				DefaultImages: modelservice.DefaultImages{
+					EPP: "ghcr.io/test/epp:latest",
+				},
 				Recorder: &events.FakeRecorder{},
 				KitImage: "ghcr.io/kitops-ml/kitops:v1.11.0",
 			}
