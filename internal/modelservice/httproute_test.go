@@ -21,11 +21,44 @@ import (
 	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	modelv1alpha1 "github.com/otterscale/api/model/v1alpha1"
 )
 
 const testModelServiceName = "qwen3-32b"
+
+var _ = Describe("BuildDefaultHTTPRoute", func() {
+	It("should build route with parentRef group/kind/name and pool backend", func() {
+		ms := &modelv1alpha1.ModelService{
+			ObjectMeta: metav1.ObjectMeta{Name: "qwen3-0.6b-fp8-dynamic", Namespace: "default"},
+			Spec:       modelv1alpha1.ModelServiceSpec{},
+		}
+		route := BuildDefaultHTTPRoute(ms, map[string]string{"app": "epp"}, "llm-d-infra-inference-gateway", "qwen3-0-6b-fp8-dynamic-epp")
+		Expect(route.Name).To(Equal("qwen3-0.6b-fp8-dynamic"))
+		Expect(route.Namespace).To(Equal("default"))
+		Expect(route.Spec.ParentRefs).To(HaveLen(1))
+		pr := route.Spec.ParentRefs[0]
+		Expect(pr.Group).NotTo(BeNil())
+		Expect(string(*pr.Group)).To(Equal(DefaultGatewayGroup))
+		Expect(pr.Kind).NotTo(BeNil())
+		Expect(string(*pr.Kind)).To(Equal(DefaultGatewayKind))
+		Expect(string(pr.Name)).To(Equal("llm-d-infra-inference-gateway"))
+		Expect(pr.Namespace).NotTo(BeNil())
+		Expect(string(*pr.Namespace)).To(Equal(DefaultGatewayNamespace))
+		Expect(route.Spec.Rules).To(HaveLen(1))
+		Expect(string(route.Spec.Rules[0].BackendRefs[0].Name)).To(Equal("qwen3-0-6b-fp8-dynamic-epp"))
+		Expect(route.Spec.Rules[0].Matches).To(HaveLen(1))
+		m := route.Spec.Rules[0].Matches[0]
+		Expect(m.Headers).To(HaveLen(1))
+		Expect(string(m.Headers[0].Name)).To(Equal(HeaderOtterScaleModelName))
+		Expect(m.Headers[0].Value).To(Equal("qwen3-0.6b-fp8-dynamic"))
+		Expect(m.Path).NotTo(BeNil())
+		Expect(m.Path.Type).NotTo(BeNil())
+		Expect(*m.Path.Type).To(Equal(gatewayv1.PathMatchPathPrefix))
+		Expect(*m.Path.Value).To(Equal("/"))
+	})
+})
 
 var _ = Describe("BuildHTTPRoute", func() {
 	It("should construct a valid HTTPRoute with same-namespace gateway", func() {
@@ -58,6 +91,11 @@ var _ = Describe("BuildHTTPRoute", func() {
 		Expect(string(route.Spec.Hostnames[0])).To(Equal("models.example.com"))
 
 		Expect(route.Spec.Rules).To(HaveLen(1))
+		Expect(route.Spec.Rules[0].Matches).To(HaveLen(1))
+		Expect(route.Spec.Rules[0].Matches[0].Headers[0].Name).To(Equal(gatewayv1.HTTPHeaderName(HeaderOtterScaleModelName)))
+		Expect(route.Spec.Rules[0].Matches[0].Headers[0].Value).To(Equal(testModelServiceName))
+		Expect(route.Spec.Rules[0].Matches[0].Path).NotTo(BeNil())
+		Expect(*route.Spec.Rules[0].Matches[0].Path.Value).To(Equal("/"))
 		backends := route.Spec.Rules[0].BackendRefs
 		Expect(backends).To(HaveLen(1))
 		ref := backends[0].BackendObjectReference

@@ -50,7 +50,6 @@ func BuildEPPDeployment(
 ) *appsv1.Deployment {
 	spec := &ms.Spec.InferencePool.EndpointPicker
 	name := EPPName(ms.Name)
-	poolName := InferencePoolName(ms.Name)
 
 	replicas := new(int32(1))
 	if spec.Replicas != nil {
@@ -69,6 +68,8 @@ func BuildEPPDeployment(
 
 	pluginsConfigFile := PluginsConfigFile(ms)
 
+	// --pool-name must match the InferencePool CR name (no -epp suffix).
+	poolName := InferencePoolName(ms.Name)
 	args := buildEPPArgs(poolName, ms.Namespace, pluginsConfigFile, extProcPort, *replicas, eppConfig)
 
 	podAnnotations := map[string]string{}
@@ -97,11 +98,11 @@ func BuildEPPDeployment(
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Selector: &metav1.LabelSelector{
-				MatchLabels: selectorLabels,
+				MatchLabels: mergeMaps(selectorLabels, map[string]string{LabelInferencePool: name}),
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      mergeMaps(selectorLabels, metadataLabels),
+					Labels:      mergeMaps(selectorLabels, metadataLabels, map[string]string{LabelInferencePool: name}),
 					Annotations: podAnnotations,
 				},
 				Spec: corev1.PodSpec{
@@ -174,6 +175,9 @@ func BuildEPPDeployment(
 	}
 }
 
+// PoolGroupAPIGroup is the value for the EPP --pool-group argument (InferencePool API group).
+const PoolGroupAPIGroup = "inference.networking.k8s.io"
+
 // buildEPPArgs constructs command-line arguments for the EPP container.
 func buildEPPArgs(
 	poolName, namespace, pluginsConfigFile string,
@@ -183,9 +187,9 @@ func buildEPPArgs(
 	args := []string{
 		fmt.Sprintf("--pool-name=%s", poolName),
 		fmt.Sprintf("--pool-namespace=%s", namespace),
+		fmt.Sprintf("--pool-group=%s", PoolGroupAPIGroup),
 		fmt.Sprintf("--config-file=%s/%s", eppConfigMountPath, pluginsConfigFile),
 		fmt.Sprintf("--grpc-port=%d", extProcPort),
-		fmt.Sprintf("--metrics-port=%d", eppMetricsPort),
 		"--zap-encoder=json",
 	}
 

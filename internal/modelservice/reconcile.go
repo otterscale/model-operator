@@ -49,8 +49,9 @@ func EnsureDecodeDeployment(
 	ms *modelv1alpha1.ModelService,
 	version string,
 	tracing TracingConfig,
+	kitImage string,
 ) error {
-	return ensureDeployment(ctx, c, scheme, ms, &ms.Spec.Decode, RoleDecode, DecodeName(ms.Name), ComponentDecode, version, tracing)
+	return ensureDeployment(ctx, c, scheme, ms, &ms.Spec.Decode, RoleDecode, DecodeName(ms.Name), ComponentDecode, version, tracing, kitImage)
 }
 
 // EnsurePrefillDeployment creates or updates the prefill Deployment if configured.
@@ -61,11 +62,12 @@ func EnsurePrefillDeployment(
 	ms *modelv1alpha1.ModelService,
 	version string,
 	tracing TracingConfig,
+	kitImage string,
 ) error {
 	if ms.Spec.Prefill == nil {
 		return cleanupDeployment(ctx, c, ms.Namespace, PrefillName(ms.Name))
 	}
-	return ensureDeployment(ctx, c, scheme, ms, ms.Spec.Prefill, RolePrefill, PrefillName(ms.Name), ComponentPrefill, version, tracing)
+	return ensureDeployment(ctx, c, scheme, ms, ms.Spec.Prefill, RolePrefill, PrefillName(ms.Name), ComponentPrefill, version, tracing, kitImage)
 }
 
 func ensureDeployment(
@@ -79,12 +81,19 @@ func ensureDeployment(
 	component string,
 	version string,
 	tracing TracingConfig,
+	kitImage string,
 ) error {
-	selectorLabels := SelectorLabelsForRole(ms.Name, component)
+	selectorLabels := SelectorLabelsForRole(ms.Name, component, roleName)
 	metadataLabels := LabelsForRole(ms.Name, component, version)
+	deployLabels := make(map[string]string, len(metadataLabels))
+	for k, v := range metadataLabels {
+		if k != LabelInferenceServer {
+			deployLabels[k] = v
+		}
+	}
 	podLabels := PodLabelsForRole(ms.Name, component, version, roleName)
 
-	desired := BuildDeployment(ms, role, roleName, deployName, podLabels, metadataLabels, selectorLabels, tracing)
+	desired := BuildDeployment(ms, role, roleName, deployName, podLabels, deployLabels, selectorLabels, tracing, kitImage)
 	if err := ctrlutil.SetControllerReference(ms, desired, scheme); err != nil {
 		return fmt.Errorf("setting Deployment owner reference: %w", err)
 	}
@@ -133,7 +142,9 @@ func cleanupDeployment(ctx context.Context, c client.Client, namespace, name str
 	return client.IgnoreNotFound(c.Delete(ctx, &dep))
 }
 
-// EnsureInferencePool creates or updates the InferencePool if configured.
+// EnsureInferencePool creates or updates the InferencePool. When spec.inferencePool is nil,
+// a default InferencePool is created with name InferencePoolName(ms.Name) (no -epp suffix)
+// so it matches the HTTPRoute backend and the EPP --pool-name flag.
 func EnsureInferencePool(
 	ctx context.Context,
 	c client.Client,
@@ -141,38 +152,58 @@ func EnsureInferencePool(
 	ms *modelv1alpha1.ModelService,
 	version string,
 ) error {
+	poolLabels := InferencePoolLabels(ms.Name, version)
 	if ms.Spec.InferencePool == nil {
-		return cleanupTyped(ctx, c, &inferenceextv1.InferencePool{ObjectMeta: objMeta(ms.Namespace, InferencePoolName(ms.Name))})
+		// Ensure the default InferencePool (name = InferencePoolName(ms.Name)). Do not cleanup
+		// that name here—we are about to create/update it. Only remove a legacy pool with the
+		// -epp suffix if it exists from before the naming was unified.
+		_ = cleanupTyped(ctx, c, &inferenceextv1.InferencePool{ObjectMeta: objMeta(ms.Namespace, EPPName(ms.Name))})
+		desired := BuildDefaultInferencePool(ms, poolLabels)
+		return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *inferenceextv1.InferencePool) {
+			existing.Spec = desired.Spec
+			existing.Labels = desired.Labels
+		})
 	}
-
-	metadataLabels := LabelsForRole(ms.Name, ComponentDecode, version)
-	desired := BuildInferencePool(ms, metadataLabels)
-
+	// Remove default InferencePool (name = EPPName) when using explicit spec.
+	_ = cleanupTyped(ctx, c, &inferenceextv1.InferencePool{ObjectMeta: objMeta(ms.Namespace, EPPName(ms.Name))})
+	desired := BuildInferencePool(ms, poolLabels)
 	return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *inferenceextv1.InferencePool) {
 		existing.Spec = desired.Spec
 		existing.Labels = desired.Labels
 	})
 }
 
-// EnsureHTTPRoute creates or updates the HTTPRoute if configured.
+// EnsureHTTPRoute creates or updates the HTTPRoute. When spec.httpRoute is set,
+// the route is built from spec. When spec.httpRoute is nil and eppConfig.DefaultGatewayName
+// is non-empty, a default HTTPRoute is created (attaches to that gateway, backend to
+// the InferencePool). When both are nil/empty, any existing HTTPRoute is cleaned up.
 func EnsureHTTPRoute(
 	ctx context.Context,
 	c client.Client,
 	scheme *runtime.Scheme,
 	ms *modelv1alpha1.ModelService,
 	version string,
+	eppConfig EPPConfig,
 ) error {
-	if ms.Spec.HTTPRoute == nil || ms.Spec.InferencePool == nil {
-		return cleanupTyped(ctx, c, &gatewayv1.HTTPRoute{ObjectMeta: objMeta(ms.Namespace, HTTPRouteName(ms.Name))})
+	routeLabels := HTTPRouteLabels(ms.Name, version)
+	if ms.Spec.HTTPRoute != nil {
+		desired := BuildHTTPRoute(ms, routeLabels)
+		return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *gatewayv1.HTTPRoute) {
+			existing.Spec = desired.Spec
+			existing.Labels = desired.Labels
+		})
 	}
-
-	metadataLabels := LabelsForRole(ms.Name, ComponentDecode, version)
-	desired := BuildHTTPRoute(ms, metadataLabels)
-
-	return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *gatewayv1.HTTPRoute) {
-		existing.Spec = desired.Spec
-		existing.Labels = desired.Labels
-	})
+	if eppConfig.DefaultGatewayName != "" {
+		// HTTPRoute backendRefs.name should always point to the InferencePool name
+		// (both for default and explicit InferencePool cases).
+		poolName := InferencePoolName(ms.Name)
+		desired := BuildDefaultHTTPRoute(ms, routeLabels, eppConfig.DefaultGatewayName, poolName)
+		return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *gatewayv1.HTTPRoute) {
+			existing.Spec = desired.Spec
+			existing.Labels = desired.Labels
+		})
+	}
+	return cleanupTyped(ctx, c, &gatewayv1.HTTPRoute{ObjectMeta: objMeta(ms.Namespace, HTTPRouteName(ms.Name))})
 }
 
 // EnsurePodMonitors creates or updates PodMonitors for decode (and optionally prefill).
@@ -194,7 +225,7 @@ func EnsurePodMonitors(
 		return cleanupTyped(ctx, c, &monitoringv1.PodMonitor{ObjectMeta: objMeta(ms.Namespace, PodMonitorName(ms.Name, RolePrefill))})
 	}
 
-	decodeSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentDecode)
+	decodeSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentDecode, RoleDecode)
 	decodeLabels := LabelsForRole(ms.Name, ComponentDecode, version)
 	decodeMonitor := BuildPodMonitor(ms, RoleDecode, decodeSelectorLabels, decodeLabels)
 	if err := ensureResource(ctx, c, scheme, ms, decodeMonitor, func(existing, desired *monitoringv1.PodMonitor) {
@@ -205,7 +236,7 @@ func EnsurePodMonitors(
 	}
 
 	if ms.Spec.Prefill != nil {
-		prefillSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentPrefill)
+		prefillSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentPrefill, RolePrefill)
 		prefillLabels := LabelsForRole(ms.Name, ComponentPrefill, version)
 		prefillMonitor := BuildPodMonitor(ms, RolePrefill, prefillSelectorLabels, prefillLabels)
 		return ensureResource(ctx, c, scheme, ms, prefillMonitor, func(existing, desired *monitoringv1.PodMonitor) {
@@ -217,7 +248,8 @@ func EnsurePodMonitors(
 	return cleanupTyped(ctx, c, &monitoringv1.PodMonitor{ObjectMeta: objMeta(ms.Namespace, PodMonitorName(ms.Name, RolePrefill))})
 }
 
-// EnsureEPPServiceAccount creates or updates the EPP ServiceAccount.
+// EnsureEPPServiceAccount creates or updates the EPP ServiceAccount. Always ensured
+// so that the EPP Deployment (created with or without spec.inferencePool) can run.
 func EnsureEPPServiceAccount(
 	ctx context.Context,
 	c client.Client,
@@ -225,9 +257,6 @@ func EnsureEPPServiceAccount(
 	ms *modelv1alpha1.ModelService,
 	version string,
 ) error {
-	if ms.Spec.InferencePool == nil {
-		return cleanupTyped(ctx, c, &corev1.ServiceAccount{ObjectMeta: objMeta(ms.Namespace, EPPName(ms.Name))})
-	}
 	metadataLabels := EPPLabels(ms.Name, version)
 	desired := BuildEPPServiceAccount(ms, metadataLabels)
 	return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *corev1.ServiceAccount) {
@@ -235,7 +264,8 @@ func EnsureEPPServiceAccount(
 	})
 }
 
-// EnsureEPPConfigMap creates or updates the EPP ConfigMap.
+// EnsureEPPConfigMap creates or updates the EPP ConfigMap. Always ensured so that
+// the EPP Deployment (created with or without spec.inferencePool) can run.
 func EnsureEPPConfigMap(
 	ctx context.Context,
 	c client.Client,
@@ -243,9 +273,6 @@ func EnsureEPPConfigMap(
 	ms *modelv1alpha1.ModelService,
 	version string,
 ) error {
-	if ms.Spec.InferencePool == nil {
-		return cleanupTyped(ctx, c, &corev1.ConfigMap{ObjectMeta: objMeta(ms.Namespace, EPPConfigMapName(ms.Name))})
-	}
 	metadataLabels := EPPLabels(ms.Name, version)
 	desired := BuildEPPConfigMap(ms, metadataLabels)
 	return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *corev1.ConfigMap) {
@@ -254,23 +281,35 @@ func EnsureEPPConfigMap(
 	})
 }
 
-// EnsureEPPDeployment creates or updates the EPP Deployment.
+// EnsureEPPDeployment creates or updates the EPP Deployment. When spec.inferencePool is not set,
+// a default InferencePool is used so the EPP Deployment is always created with the ModelService.
+// The defaultImages parameter supplies operator-level image defaults for the synthetic EPP spec.
 func EnsureEPPDeployment(
 	ctx context.Context,
 	c client.Client,
 	scheme *runtime.Scheme,
 	ms *modelv1alpha1.ModelService,
 	eppConfig EPPConfig,
+	defaultImages DefaultImages,
 	version string,
 	configHash string,
 ) error {
 	name := EPPName(ms.Name)
+	msToBuild := ms
 	if ms.Spec.InferencePool == nil {
-		return cleanupDeployment(ctx, c, ms.Namespace, name)
+		replicas := int32(1)
+		msToBuild = ms.DeepCopy()
+		msToBuild.Spec.InferencePool = &modelv1alpha1.InferencePoolSpec{
+			EndpointPicker: modelv1alpha1.EndpointPickerSpec{
+				Image:    defaultImages.EPP,
+				Replicas: &replicas,
+				Port:     9002,
+			},
+		}
 	}
 	metadataLabels := EPPLabels(ms.Name, version)
 	selectorLabels := EPPSelectorLabels(ms.Name)
-	desired := BuildEPPDeployment(ms, eppConfig, metadataLabels, selectorLabels, configHash)
+	desired := BuildEPPDeployment(msToBuild, eppConfig, metadataLabels, selectorLabels, configHash)
 	if err := ctrlutil.SetControllerReference(ms, desired, scheme); err != nil {
 		return fmt.Errorf("setting EPP Deployment owner reference: %w", err)
 	}
@@ -299,7 +338,13 @@ func EnsureEPPDeployment(
 	return nil
 }
 
-// EnsureEPPService creates or updates the EPP Service.
+// EnsureEPPService creates or updates the EPP Service. Always ensured so it is created
+// together with the EPP Deployment (with or without spec.inferencePool).
+// BuildEPPService is safe when InferencePool is nil (uses default port).
+//
+// Note: Reconcile runs only when ModelService.spec changes (GenerationChangedPredicate).
+// If the operator was upgraded after the ModelService existed, trigger a reconcile by
+// patching the spec (e.g. kubectl patch modelservice <name> -n <ns> --type=merge -p '{"spec":{"engine":{"port":8000}}}').
 func EnsureEPPService(
 	ctx context.Context,
 	c client.Client,
@@ -307,17 +352,20 @@ func EnsureEPPService(
 	ms *modelv1alpha1.ModelService,
 	version string,
 ) error {
-	if ms.Spec.InferencePool == nil {
-		return cleanupTyped(ctx, c, &corev1.Service{ObjectMeta: objMeta(ms.Namespace, EPPName(ms.Name))})
-	}
 	metadataLabels := EPPLabels(ms.Name, version)
 	selectorLabels := EPPSelectorLabels(ms.Name)
 	desired := BuildEPPService(ms, metadataLabels, selectorLabels)
-	return ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *corev1.Service) {
+	err := ensureResource(ctx, c, scheme, ms, desired, func(existing, desired *corev1.Service) {
 		existing.Spec.Ports = desired.Spec.Ports
 		existing.Spec.Selector = desired.Spec.Selector
 		existing.Labels = desired.Labels
 	})
+	if err != nil {
+		return err
+	}
+	// Log so operator logs show EPP Service was ensured (helps confirm reconcile ran).
+	log.FromContext(ctx).V(1).Info("EPP Service ensured", "service", desired.Name, "namespace", ms.Namespace)
+	return nil
 }
 
 // EnsureEPPSATokenSecret creates or updates the EPP SA token Secret.
@@ -345,7 +393,9 @@ func EnsureEPPSATokenSecret(
 	})
 }
 
-// EnsureEPPRBAC creates or updates the EPP Role and RoleBinding.
+// EnsureEPPRBAC creates or updates the EPP Role and RoleBinding. Always ensured when
+// the EPP Deployment exists (including default EPP when InferencePool is nil) so the
+// EPP Pod can list/watch inferencepools and pods.
 func EnsureEPPRBAC(
 	ctx context.Context,
 	c client.Client,
@@ -353,15 +403,11 @@ func EnsureEPPRBAC(
 	ms *modelv1alpha1.ModelService,
 	version string,
 ) error {
-	name := EPPName(ms.Name)
-	if ms.Spec.InferencePool == nil {
-		if err := cleanupTyped(ctx, c, &rbacv1.Role{ObjectMeta: objMeta(ms.Namespace, name)}); err != nil {
-			return err
-		}
-		return cleanupTyped(ctx, c, &rbacv1.RoleBinding{ObjectMeta: objMeta(ms.Namespace, name)})
-	}
 	metadataLabels := EPPLabels(ms.Name, version)
-	replicas := DefaultReplicas(ms.Spec.InferencePool.EndpointPicker.Replicas)
+	replicas := int32(1)
+	if ms.Spec.InferencePool != nil && ms.Spec.InferencePool.EndpointPicker.Replicas != nil {
+		replicas = *ms.Spec.InferencePool.EndpointPicker.Replicas
+	}
 	role, binding := BuildEPPRBAC(ms, metadataLabels, replicas)
 
 	if err := ensureResource(ctx, c, scheme, ms, role, func(existing, desired *rbacv1.Role) {
@@ -474,13 +520,23 @@ func ensureClusterResource[T client.Object](
 		return nil
 	}
 	if err := c.Update(ctx, existing); err != nil {
+		// If the resource was deleted between Get and Update, treat it as NotFound and recreate.
+		if apierrors.IsNotFound(err) {
+			if err := c.Create(ctx, desired); err != nil {
+				return fmt.Errorf("recreating %s %s after NotFound: %w", kind, name, err)
+			}
+			log.FromContext(ctx).Info("Recreated "+kind, "name", name)
+			return nil
+		}
 		return fmt.Errorf("updating %s %s: %w", kind, name, err)
 	}
 	log.FromContext(ctx).Info("Updated "+kind, "name", name)
 	return nil
 }
 
-// EnsureDestinationRule creates or updates the Istio DestinationRule.
+// EnsureDestinationRule creates or updates the Istio DestinationRule for the EPP Service.
+// The rule is ensured whenever the provider is Istio so that the EPP Deployment can
+// connect to its own Service over mTLS, regardless of whether spec.inferencePool is set.
 func EnsureDestinationRule(
 	ctx context.Context,
 	c client.Client,
@@ -490,7 +546,7 @@ func EnsureDestinationRule(
 	version string,
 ) error {
 	name := EPPName(ms.Name)
-	if ms.Spec.InferencePool == nil || eppConfig.Provider != ProviderIstio {
+	if eppConfig.Provider != ProviderIstio {
 		return cleanupTyped(ctx, c, &istionetworkingv1beta1.DestinationRule{ObjectMeta: objMeta(ms.Namespace, name)})
 	}
 	metadataLabels := EPPLabels(ms.Name, version)
@@ -564,12 +620,37 @@ func ensureResource[T client.Object](
 		return err
 	}
 
+	// Special-case Istio DestinationRule to avoid panics when deep-equaling
+	// protobuf-generated types (e.g. wrapperspb.BoolValue).
+	if _, ok := any(existing).(*istionetworkingv1beta1.DestinationRule); ok {
+		mutateFn(existing, desired)
+		if err := c.Update(ctx, existing); err != nil {
+			if apierrors.IsNotFound(err) {
+				if err := c.Create(ctx, desired); err != nil {
+					return fmt.Errorf("recreating %s %s after NotFound: %w", kind, name, err)
+				}
+				log.FromContext(ctx).Info("Recreated "+kind, "name", name)
+				return nil
+			}
+			return fmt.Errorf("updating %s %s: %w", kind, name, err)
+		}
+		log.FromContext(ctx).Info("Updated "+kind, "name", name)
+		return nil
+	}
+
 	before := existing.DeepCopyObject()
 	mutateFn(existing, desired)
 	if equality.Semantic.DeepEqual(before, existing) {
 		return nil
 	}
 	if err := c.Update(ctx, existing); err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := c.Create(ctx, desired); err != nil {
+				return fmt.Errorf("recreating %s %s after NotFound: %w", kind, name, err)
+			}
+			log.FromContext(ctx).Info("Recreated "+kind, "name", name)
+			return nil
+		}
 		return fmt.Errorf("updating %s %s: %w", kind, name, err)
 	}
 	log.FromContext(ctx).Info("Updated "+kind, "name", name)

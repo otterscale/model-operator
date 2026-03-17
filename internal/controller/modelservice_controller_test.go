@@ -91,10 +91,14 @@ var _ = Describe("ModelService Controller", func() {
 
 		It("should create the decode Deployment", func() {
 			reconciler := &ModelServiceReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Version:  "test",
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				Version: "test",
+				DefaultImages: modelservice.DefaultImages{
+					EPP: "ghcr.io/test/epp:latest",
+				},
 				Recorder: &events.FakeRecorder{},
+				KitImage: "ghcr.io/kitops-ml/kitops:v1.11.0",
 			}
 
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
@@ -116,20 +120,31 @@ var _ = Describe("ModelService Controller", func() {
 			Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal("vllm/vllm-openai:latest"))
 
-			Expect(dep.Spec.Template.Spec.Volumes).To(HaveLen(1))
-			vol := dep.Spec.Template.Spec.Volumes[0]
-			Expect(vol.Name).To(Equal(modelservice.ModelVolumeName))
-			Expect(vol.Image).NotTo(BeNil())
-			Expect(vol.Image.Reference).To(Equal("registry.example.com/models/test:v1"))
-			Expect(vol.Image.PullPolicy).To(Equal(corev1.PullIfNotPresent))
+			Expect(dep.Spec.Template.Spec.Volumes).NotTo(BeEmpty())
+			var modelVol *corev1.Volume
+			for i := range dep.Spec.Template.Spec.Volumes {
+				v := &dep.Spec.Template.Spec.Volumes[i]
+				if v.Name == modelservice.ModelVolumeName {
+					modelVol = v
+					break
+				}
+			}
+			Expect(modelVol).NotTo(BeNil())
+			Expect(modelVol.EmptyDir).NotTo(BeNil())
+			Expect(dep.Spec.Template.Spec.InitContainers).NotTo(BeEmpty())
+			Expect(dep.Spec.Template.Spec.InitContainers[0].Name).To(Equal("model-unpack"))
 		})
 
 		It("should not create prefill Deployment when not specified", func() {
 			reconciler := &ModelServiceReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Version:  "test",
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				Version: "test",
+				DefaultImages: modelservice.DefaultImages{
+					EPP: "ghcr.io/test/epp:latest",
+				},
 				Recorder: &events.FakeRecorder{},
+				KitImage: "ghcr.io/kitops-ml/kitops:v1.11.0",
 			}
 
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
@@ -151,10 +166,14 @@ var _ = Describe("ModelService Controller", func() {
 
 		It("should update status after reconciliation", func() {
 			reconciler := &ModelServiceReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Version:  "test",
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				Version: "test",
+				DefaultImages: modelservice.DefaultImages{
+					EPP: "ghcr.io/test/epp:latest",
+				},
 				Recorder: &events.FakeRecorder{},
+				KitImage: "ghcr.io/kitops-ml/kitops:v1.11.0",
 			}
 
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{

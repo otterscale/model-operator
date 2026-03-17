@@ -53,12 +53,15 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	"$(CONTROLLER_GEN)" object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 API_VERSION ?= $(call gomodver,github.com/otterscale/api)
+GAIE_VERSION ?= $(call gomodver,sigs.k8s.io/gateway-api-inference-extension)
 
 .PHONY: download-crds
 download-crds: ## Download CRDs from the API module release.
 	@mkdir -p config/crd/bases
 	curl -sSL -o config/crd/bases/crds.yaml \
 		https://github.com/otterscale/api/releases/download/$(API_VERSION)/crds.yaml
+	curl -sSL -o config/crd/bases/gaie.yaml \
+	    https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$(GAIE_VERSION)/manifests.yaml
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.

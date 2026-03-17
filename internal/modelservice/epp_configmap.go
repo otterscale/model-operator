@@ -34,20 +34,15 @@ const (
 )
 
 // defaultPluginsConfig is the standard EndpointPickerConfig for non-PD mode.
-// It mirrors the upstream epplib default-plugins.yaml with queue, KV-cache,
-// prefix-cache scorers, a metrics-data-source, and a core-metrics-extractor.
+// Uses queue, KV-cache, and prefix-cache scorers only. metrics-data-source and
+// core-metrics-extractor are omitted so EPP images that do not register those
+// plugins can start.
 const defaultPluginsConfig = `apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - type: queue-scorer
 - type: kv-cache-utilization-scorer
 - type: prefix-cache-scorer
-- type: metrics-data-source
-  parameters:
-    scheme: "http"
-    path: "/metrics"
-    insecureSkipVerify: true
-- type: core-metrics-extractor
 schedulingProfiles:
 - name: default
   plugins:
