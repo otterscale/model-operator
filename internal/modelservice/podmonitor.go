@@ -30,19 +30,21 @@ func BuildPodMonitor(
 	selectorLabels map[string]string,
 	metadataLabels map[string]string,
 ) *monitoringv1.PodMonitor {
-	mon := ms.Spec.Monitoring.PodMonitor
+	portName := "http"
+	path := "/metrics"
+	interval := "30s"
 
-	portName := mon.PortName
-	if portName == "" {
-		portName = "http"
-	}
-	path := mon.Path
-	if path == "" {
-		path = "/metrics"
-	}
-	interval := mon.Interval
-	if interval == "" {
-		interval = "30s"
+	if ms.Spec.Monitoring != nil && ms.Spec.Monitoring.PodMonitor != nil {
+		mon := ms.Spec.Monitoring.PodMonitor
+		if mon.PortName != "" {
+			portName = mon.PortName
+		}
+		if mon.Path != "" {
+			path = mon.Path
+		}
+		if mon.Interval != "" {
+			interval = mon.Interval
+		}
 	}
 
 	return &monitoringv1.PodMonitor{

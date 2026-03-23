@@ -214,9 +214,12 @@ func EnsurePodMonitors(
 	ms *modelv1alpha1.ModelService,
 	version string,
 ) error {
-	enabled := ms.Spec.Monitoring != nil &&
-		ms.Spec.Monitoring.PodMonitor != nil &&
-		ms.Spec.Monitoring.PodMonitor.Enabled
+	// Default behavior: create PodMonitors with default settings when monitoring
+	// is not specified. Only explicit "enabled: false" disables creation.
+	enabled := true
+	if ms.Spec.Monitoring != nil && ms.Spec.Monitoring.PodMonitor != nil {
+		enabled = ms.Spec.Monitoring.PodMonitor.Enabled
+	}
 
 	if !enabled {
 		if err := cleanupTyped(ctx, c, &monitoringv1.PodMonitor{ObjectMeta: objMeta(ms.Namespace, PodMonitorName(ms.Name, RoleDecode))}); err != nil {
@@ -227,6 +230,7 @@ func EnsurePodMonitors(
 
 	decodeSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentDecode, RoleDecode)
 	decodeLabels := LabelsForRole(ms.Name, ComponentDecode, version)
+	delete(decodeLabels, LabelInferenceServer)
 	decodeMonitor := BuildPodMonitor(ms, RoleDecode, decodeSelectorLabels, decodeLabels)
 	if err := ensureResource(ctx, c, scheme, ms, decodeMonitor, func(existing, desired *monitoringv1.PodMonitor) {
 		existing.Spec = desired.Spec
@@ -238,6 +242,7 @@ func EnsurePodMonitors(
 	if ms.Spec.Prefill != nil {
 		prefillSelectorLabels := SelectorLabelsForRole(ms.Name, ComponentPrefill, RolePrefill)
 		prefillLabels := LabelsForRole(ms.Name, ComponentPrefill, version)
+		delete(prefillLabels, LabelInferenceServer)
 		prefillMonitor := BuildPodMonitor(ms, RolePrefill, prefillSelectorLabels, prefillLabels)
 		return ensureResource(ctx, c, scheme, ms, prefillMonitor, func(existing, desired *monitoringv1.PodMonitor) {
 			existing.Spec = desired.Spec
