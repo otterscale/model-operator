@@ -171,6 +171,39 @@ var _ = Describe("BuildDeployment", func() {
 		}
 	})
 
+	It("should expose VLLM_NIXL_SIDE_CHANNEL_PORT on vLLM container for decode and prefill", func() {
+		ms := newTestModelService()
+		expected := int32(6123)
+		ms.Spec.Engine.Env = append(ms.Spec.Engine.Env, corev1.EnvVar{
+			Name:  "VLLM_NIXL_SIDE_CHANNEL_PORT",
+			Value: "6123",
+		})
+
+		role := &ms.Spec.Decode
+
+		decodeDep := BuildDeployment(ms, role, RoleDecode, "test-decode", nil, nil, nil, TracingConfig{}, testKitImage)
+		decodeVLLM := decodeDep.Spec.Template.Spec.Containers[0]
+		var foundDecode bool
+		for _, p := range decodeVLLM.Ports {
+			if p.ContainerPort == expected && p.Protocol == corev1.ProtocolTCP {
+				foundDecode = true
+				break
+			}
+		}
+		Expect(foundDecode).To(BeTrue(), "Decode vLLM should expose VLLM_NIXL_SIDE_CHANNEL_PORT")
+
+		prefillDep := BuildDeployment(ms, role, RolePrefill, "test-prefill", nil, nil, nil, TracingConfig{}, testKitImage)
+		prefillVLLM := prefillDep.Spec.Template.Spec.Containers[0]
+		var foundPrefill bool
+		for _, p := range prefillVLLM.Ports {
+			if p.ContainerPort == expected && p.Protocol == corev1.ProtocolTCP {
+				foundPrefill = true
+				break
+			}
+		}
+		Expect(foundPrefill).To(BeTrue(), "Prefill vLLM should expose VLLM_NIXL_SIDE_CHANNEL_PORT")
+	})
+
 	It("should set security context correctly", func() {
 		ms := newTestModelService()
 		role := &ms.Spec.Decode

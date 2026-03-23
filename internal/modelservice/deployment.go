@@ -18,6 +18,7 @@ package modelservice
 
 import (
 	"fmt"
+	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -154,6 +155,34 @@ func buildVLLMContainer(
 		},
 	}
 
+	// If VLLM_NIXL_SIDE_CHANNEL_PORT is provided via engine.env, expose it as a
+	// container port for both decode and prefill pods.
+	var nixlPort int32
+	for _, e := range ms.Spec.Engine.Env {
+		if e.Name == "VLLM_NIXL_SIDE_CHANNEL_PORT" {
+			if p, err := strconv.ParseInt(e.Value, 10, 32); err == nil && p > 0 && p <= 65535 {
+				nixlPort = int32(p)
+			}
+			break
+		}
+	}
+	if nixlPort != 0 {
+		exists := false
+		for _, p := range c.Ports {
+			if p.ContainerPort == nixlPort && p.Protocol == corev1.ProtocolTCP {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			c.Ports = append(c.Ports, corev1.ContainerPort{
+				Name:          "nixl-side",
+				ContainerPort: nixlPort,
+				Protocol:      corev1.ProtocolTCP,
+			})
+		}
+	}
+
 	return c
 }
 
@@ -250,9 +279,8 @@ func buildInitContainers(ms *modelv1alpha1.ModelService, isDecodeRole bool, trac
 	if proxy.ZapLogLevel != "" {
 		args = append(args, "--zap-log-level", proxy.ZapLogLevel)
 	}
-	if proxy.SecureProxy != nil {
-		args = append(args, fmt.Sprintf("--secure-proxy=%t", *proxy.SecureProxy))
-	}
+	secureProxy := proxy.SecureProxy != nil && *proxy.SecureProxy
+	args = append(args, fmt.Sprintf("--secure-proxy=%t", secureProxy))
 	if proxy.PrefillerUseTLS != nil {
 		args = append(args, fmt.Sprintf("--prefiller-use-tls=%t", *proxy.PrefillerUseTLS))
 	}
