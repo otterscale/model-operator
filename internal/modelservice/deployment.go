@@ -279,9 +279,8 @@ func buildInitContainers(ms *modelv1alpha1.ModelService, isDecodeRole bool, trac
 	if proxy.ZapLogLevel != "" {
 		args = append(args, "--zap-log-level", proxy.ZapLogLevel)
 	}
-	if proxy.SecureProxy != nil {
-		args = append(args, fmt.Sprintf("--secure-proxy=%t", *proxy.SecureProxy))
-	}
+	secureProxy := proxy.SecureProxy != nil && *proxy.SecureProxy
+	args = append(args, fmt.Sprintf("--secure-proxy=%t", secureProxy))
 	if proxy.PrefillerUseTLS != nil {
 		args = append(args, fmt.Sprintf("--prefiller-use-tls=%t", *proxy.PrefillerUseTLS))
 	}
