@@ -62,6 +62,13 @@ func BuildPodMonitor(
 					Port:     &portName,
 					Path:     path,
 					Interval: monitoringv1.Duration(interval),
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							Action:       "replace",
+							SourceLabels: []monitoringv1.LabelName{"__meta_kubernetes_pod_label_app_kubernetes_io_name"},
+							TargetLabel:  "model_service",
+						},
+					},
 				},
 			},
 		},
