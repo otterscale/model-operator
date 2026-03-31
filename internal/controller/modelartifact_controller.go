@@ -66,9 +66,14 @@ type ModelArtifactReconciler struct {
 // Reconcile is the main loop for the controller.
 // It implements level-triggered reconciliation: Fetch -> Reconcile Resources -> Status Update.
 //
+<<<<<<< HEAD
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.3/pkg/reconcile
+=======
 // Deletion is handled entirely by Kubernetes garbage collection: all child resources
 // are created with OwnerReferences pointing to the Artifact, so they are automatically
 // cascade-deleted when the Artifact is removed. No finalizer is needed.
+>>>>>>> tmp-original-31-03-26-01-54
 func (r *ModelArtifactReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithName(req.Name)
 	ctx = log.IntoContext(ctx, logger)

@@ -84,8 +84,13 @@ type ModelServiceReconciler struct {
 // Reconcile is the main loop for the ModelService controller.
 // It implements level-triggered reconciliation: Fetch -> Finalizer -> Reconcile Resources -> Status Update.
 //
+<<<<<<< HEAD
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.3/pkg/reconcile
+=======
 // Namespace-scoped child resources are cleaned up automatically via OwnerReferences.
 // Cluster-scoped resources (ClusterRole/ClusterRoleBinding) are cleaned up via a Finalizer.
+>>>>>>> tmp-original-31-03-26-01-54
 func (r *ModelServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithName(req.Name)
 	ctx = log.IntoContext(ctx, logger)
