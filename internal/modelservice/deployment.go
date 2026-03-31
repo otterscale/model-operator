@@ -75,7 +75,8 @@ func BuildDeployment(
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: podLabels,
+					Labels:      podLabels,
+					Annotations: ms.Annotations,
 				},
 				Spec: corev1.PodSpec{
 					InitContainers:               initContainers,
