@@ -18,6 +18,7 @@ package modelservice
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -75,7 +76,8 @@ func BuildDeployment(
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: podLabels,
+					Labels:      podLabels,
+					Annotations: maps.Clone(role.Annotations),
 				},
 				Spec: corev1.PodSpec{
 					InitContainers:               initContainers,
