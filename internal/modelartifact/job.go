@@ -99,7 +99,6 @@ func BuildPVC(artifact *modelv1alpha1.ModelArtifact, labels map[string]string) *
 //     so that kit push authenticates transparently without an explicit login step
 func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map[string]string) *batchv1.Job {
 	env := buildEnvVars(artifact)
-	fsGroup := int64(1000)
 
 	volumeMounts := []corev1.VolumeMount{
 		{
