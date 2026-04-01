@@ -34,7 +34,7 @@ var _ = Describe("BuildDefaultHTTPRoute", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "qwen3-0.6b-fp8-dynamic", Namespace: "default"},
 			Spec:       modelv1alpha1.ModelServiceSpec{},
 		}
-		route := BuildDefaultHTTPRoute(ms, map[string]string{"app": "epp"}, "llm-d-infra-inference-gateway", "qwen3-0-6b-fp8-dynamic-epp")
+		route := BuildDefaultHTTPRoute(ms, map[string]string{"app": "epp"}, "otterscale-llm-d-infra-inference-gateway", "qwen3-0-6b-fp8-dynamic-epp")
 		Expect(route.Name).To(Equal("qwen3-0.6b-fp8-dynamic"))
 		Expect(route.Namespace).To(Equal("default"))
 		Expect(route.Spec.ParentRefs).To(HaveLen(1))
@@ -43,7 +43,7 @@ var _ = Describe("BuildDefaultHTTPRoute", func() {
 		Expect(string(*pr.Group)).To(Equal(DefaultGatewayGroup))
 		Expect(pr.Kind).NotTo(BeNil())
 		Expect(string(*pr.Kind)).To(Equal(DefaultGatewayKind))
-		Expect(string(pr.Name)).To(Equal("llm-d-infra-inference-gateway"))
+		Expect(string(pr.Name)).To(Equal("otterscale-llm-d-infra-inference-gateway"))
 		Expect(pr.Namespace).NotTo(BeNil())
 		Expect(string(*pr.Namespace)).To(Equal(DefaultGatewayNamespace))
 		Expect(route.Spec.Rules).To(HaveLen(1))
