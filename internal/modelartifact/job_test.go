@@ -148,6 +148,13 @@ var _ = Describe("BuildJob", func() {
 		Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))
 	})
 
+	It("should set pod fsGroup to 1000", func() {
+		job := modelartifact.BuildJob(ma, kitImage, labels)
+		Expect(job.Spec.Template.Spec.SecurityContext).NotTo(BeNil())
+		Expect(job.Spec.Template.Spec.SecurityContext.FSGroup).NotTo(BeNil())
+		Expect(*job.Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(int64(1000)))
+	})
+
 	It("should use the kit image for the container", func() {
 		job := modelartifact.BuildJob(ma, kitImage, labels)
 		Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
