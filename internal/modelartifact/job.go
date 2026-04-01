@@ -159,7 +159,7 @@ func BuildJob(artifact *modelv1alpha1.ModelArtifact, kitImage string, labels map
 					RestartPolicy:                corev1.RestartPolicyNever,
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot: new(true),
-						FSGroup:      &fsGroup,
+						FSGroup:      new(int64(1000)),
 						SeccompProfile: &corev1.SeccompProfile{
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
 						},
