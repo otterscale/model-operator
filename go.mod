@@ -8,7 +8,7 @@ require (
 	github.com/onsi/gomega v1.39.1
 	github.com/otterscale/api v1.0.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.90.1
-	istio.io/api v1.29.1
+	istio.io/api v1.29.2
 	istio.io/client-go v1.29.1
 	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
