@@ -87,7 +87,7 @@ func main() {
 		"Default EPP image. Falls back to this when spec.inferencePool.endpointPicker.image is omitted.")
 	flag.StringVar(&defaultRoutingProxyImage, "default-routing-proxy-image", "ghcr.io/llm-d/llm-d-routing-sidecar:v0.6.0",
 		"Default routing proxy sidecar image. Falls back to this when spec.routingProxy.image is omitted.")
-	flag.StringVar(&defaultGatewayName, "default-gateway-name", "llm-d-infra-inference-gateway",
+	flag.StringVar(&defaultGatewayName, "default-gateway-name", "otterscale-llm-d-infra-inference-gateway",
 		"Default Gateway name for HTTPRoute parentRef. Falls back to this when spec.httpRoute is omitted. "+
 			"Set to empty to disable automatic HTTPRoute creation.")
 	flag.StringVar(&kitImage, "kit-image", "ghcr.io/kitops-ml/kitops:v1.11.0",
